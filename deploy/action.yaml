@@ -1,0 +1,43 @@
+name: "Deploy code to an Astro Cloud Dpeloyment"
+description: "Deploys your Astro project to an Astro Cloud Deployment. Works with DAG-Only Deploys enabled or disabled"
+inputs:
+  dag-deploy-enabled:
+    required: false
+    default: false
+    description: "If true only DAGs will be deployed when dag files are pushed"
+runs:
+  using: "composite"
+  steps:
+    - name: checkout repo
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 2
+    # Determine if only DAGs have changes 
+    - name: Get Deployment Type
+      run: |
+        files=$(git diff main... --name-only)
+        dags_only=1
+
+        for file in $files; do
+          if [[ $file != "$DAG_FOLDER"* ]]; then
+            echo "$file is not a dag, triggering a full image build"
+            dags_only=0
+            break
+          fi
+        done
+
+        echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
+      id: deployment-type
+    # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
+    - name: DAG Deploy to Astro
+      if: steps.deployment-type.outputs.DAGS_ONLY == 1 && ${{ inputs.dag_deploy_enabled }} == true
+      run: |
+        curl -sSL https://install.astronomer.io | sudo bash -s
+        astro deploy --dags
+    # If any other files changed or dag deploys is disabled, deploy the entire Astro project
+    - name: Image and DAG Deploy to Astro
+      if: steps.deployment-type.outputs.DAGS_ONLY == 0 || ${{ inputs.dag_deploy_enabled }} == false
+      run: |
+        curl -sSL https://install.astronomer.io | sudo bash -s
+        astro deploy
+  
