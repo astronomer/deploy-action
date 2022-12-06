@@ -39,8 +39,8 @@ runs:
       run: |
         echo ${{ steps.deployment-type.outputs.DAGS_ONLY }}
         echo ${{ inputs.dag-deploy-enabled }}
-        echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 1 }} && {{ inputs.dag-deploy-enabled == true }}
-        echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 0 }} || {{ inputs.dag-deploy-enabled == false }}
+        echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 1 }} && ${{ inputs.dag-deploy-enabled == true }}
+        echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 0 }} || ${{ inputs.dag-deploy-enabled == false }}
       shell: bash
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: DAG Deploy to Astro
