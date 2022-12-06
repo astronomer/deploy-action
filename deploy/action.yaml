@@ -44,14 +44,14 @@ runs:
       shell: bash
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: DAG Deploy to Astro
-      if: steps.deployment-type.outputs.DAGS_ONLY == 1 && ${{ inputs.dag-deploy-enabled }} == true
+      if: ${{ steps.deployment-type.outputs.DAGS_ONLY == 1 }} && ${{ inputs.dag-deploy-enabled }} == true
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
         astro deploy --dags
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
-      if: steps.deployment-type.outputs.DAGS_ONLY == 0 || ${{ inputs.dag-deploy-enabled }} == false
+      if: ${{ steps.deployment-type.outputs.DAGS_ONLY == 0 }} || ${{ inputs.dag-deploy-enabled }} == false
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
         astro deploy
