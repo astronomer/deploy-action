@@ -19,7 +19,7 @@ runs:
     # Determine if only DAGs have changes 
     - name: Get Deployment Type
       run: |
-        files=$(git diff main... --name-only)
+        files=$(git diff --name-only HEAD^..HEAD)
         echo $files
         dags_only=1
 
