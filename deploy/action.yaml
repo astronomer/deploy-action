@@ -23,20 +23,22 @@ runs:
         dags_only=1
 
         for file in $files; do
-          if [[ $file != "${{ inputs.dag-folder}}"* ]]; then
+          if [[ $file != "${{ inputs.dag-folder }}"* ]]; then
             echo "$file is not a dag, triggering a full image build"
             dags_only=0
             break
           fi
         done
 
-        echo dags_only
-        echo inputs.dag-deploy-enabled
+        echo $dags_only
+        echo ${{ inputs.dag-deploy-enabled }}
         echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
       shell: bash
       id: deployment-type
     - name: debug
       run: |
+        echo ${{ steps.deployment-type.outputs.DAGS_ONLY }}
+        echo ${{ inputs.dag-deploy-enabled  }}
         echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 1 && inputs.dag-deploy-enabled == true }}
         echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 0 || inputs.dag-deploy-enabled == false }}
       shell: bash
