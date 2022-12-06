@@ -20,6 +20,7 @@ runs:
     - name: Get Deployment Type
       run: |
         files=$(git diff main... --name-only)
+        echo $files
         dags_only=1
 
         for file in $files; do
@@ -39,13 +40,6 @@ runs:
         echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
       shell: bash
       id: deployment-type
-    - name: debug
-      run: |
-        echo ${{ steps.deployment-type.outputs.DAGS_ONLY }}
-        echo ${{ inputs.dag-deploy-enabled }}
-        echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 1 }} && ${{ inputs.dag-deploy-enabled }} == true
-        echo ${{ steps.deployment-type.outputs.DAGS_ONLY == 0 }} || ${{ inputs.dag-deploy-enabled }} == false
-      shell: bash
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
