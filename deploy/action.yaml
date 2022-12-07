@@ -1,5 +1,5 @@
 name: "Deploy code to an Astro Cloud Dpeloyment"
-description: "Deploys your Astro project to an Astro Cloud Deployment. Works with DAG-Only Deploys enabled or disabled"
+description: "Deploys your Astro project to an Astro Cloud Deployment. Works with DAG-Only Deploys enabled or disabled."
 inputs:
   dag-deploy-enabled:
     required: false
@@ -51,17 +51,17 @@ runs:
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: setup deploy options
       run: |
-        options=$()
+        options=""
         if [[ ${{ inputs.parse }} == true ]]; then
-          options= --parse
+          options=" --parse"
         fi
 
         if [[ ${{ inputs.pytest }} == true ]]; then
-          options= --pytest --pytest-file ${{ inputs.pytest-file }}
+          options=" --pytest --pytest-file ${{ inputs.pytest-file }}""
         fi
 
         if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
-          options= --parse --pytest --pytest-file ${{ inputs.pytest-file }}
+          options=" --parse --pytest --pytest-file ${{ inputs.pytest-file }}"
         fi
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
       shell: bash
