@@ -57,7 +57,7 @@ runs:
         fi
 
         if [[ ${{ inputs.pytest }} == true ]]; then
-          options=" --pytest --pytest-file ${{ inputs.pytest-file }}""
+          options=" --pytest --pytest-file ${{ inputs.pytest-file }}"
         fi
 
         if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
