@@ -9,6 +9,17 @@ inputs:
     required: false
     default: dags/
     description: "Path to dag folder"
+  parse:
+    required: false
+    default: false
+    description: "Parse DAGs before deploying to astro"
+  pytest:
+    required: false
+    default: false
+    description: "Run custom Pytests before deploying to astro."
+  pytest-file:
+    required: false
+    description: "Specify custom Pytest files to run with the pytest command."
 runs:
   using: "composite"
   steps:
@@ -20,12 +31,11 @@ runs:
     - name: Get Deployment Type
       run: |
         files=$(git diff --name-only HEAD^..HEAD)
-        echo $files
         dags_only=1
 
         for file in $files; do
           if [[ $file != "${{ inputs.dag-folder }}"* ]]; then
-            echo "$file is not a dag, triggering a full image build"
+            echo ($file is not a dag, triggering a full image build)
             dags_only=0
             break
           fi
@@ -35,23 +45,38 @@ runs:
           dags_only=0
         fi
 
-        echo $dags_only
-        echo ${{ inputs.dag-deploy-enabled }}
         echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
       shell: bash
       id: deployment-type
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
+    - name: setup deploy options
+      run: |
+        options=$()
+        if [[ ${{ inputs.parse }} == true ]]; then
+          options=$( --parse)
+        fi
+
+        if [[ ${{ inputs.pytest }} == true ]]; then
+          options=$( --pytest --pytest-file ${{ inputs.pytest-file }})
+        fi
+
+        if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
+          options=$( --parse --pytest --pytest-file ${{ inputs.pytest-file }})
+        fi
+        echo "OPTIONS=$options" >> $GITHUB_OUTPUT
+      shell: bash
+      id: deploy-options
     - name: DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy --dags
+        astro deploy --dags ${{steps.deploy-options.ouputs.OPTIONS}}
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy
+        astro deploy ${{steps.deploy-options.ouputs.OPTIONS}}
       shell: bash
   
