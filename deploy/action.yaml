@@ -20,6 +20,10 @@ inputs:
   pytest-file:
     required: false
     description: "Specify custom Pytest files to run with the pytest command."
+  force:
+    required: false
+    default: false
+    description: "Will force deploy your code to Astornomer. Skips parse test on image deploys."
 runs:
   using: "composite"
   steps:
@@ -63,6 +67,7 @@ runs:
         if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
           options=" --parse --pytest --pytest-file ${{ inputs.pytest-file }}"
         fi
+        echo $options
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
       shell: bash
       id: deploy-options
@@ -77,6 +82,11 @@ runs:
       if: steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy ${{steps.deploy-options.ouputs.OPTIONS}}
+
+        if [[ ${{ inputs.force }} == true ]]; then
+          astro deploy ${{steps.deploy-options.ouputs.OPTIONS}} -f
+        else
+          astro deploy ${{steps.deploy-options.ouputs.OPTIONS}}
+        fi
       shell: bash
   
