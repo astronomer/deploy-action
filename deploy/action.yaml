@@ -4,19 +4,19 @@ inputs:
   dag-deploy-enabled:
     required: false
     default: false
-    description: "If true only DAGs will be deployed when dag files are pushed"
+    description: "If true only DAGs will be deployed when dag files are pushed."
   dag-folder:
     required: false
     default: dags/
-    description: "Path to dag folder"
+    description: "Path to dag folder."
   parse:
     required: false
     default: false
-    description: "Parse DAGs before deploying to astro"
+    description: "If true DAGs will be parsed before deploying to Astro."
   pytest:
     required: false
     default: false
-    description: "Run custom Pytests before deploying to astro."
+    description: "if true custom Pytests will be ran before deploying to Astro."
   pytest-file:
     required: false
     description: "Specify custom Pytest files to run with the pytest command."
@@ -57,15 +57,15 @@ runs:
       run: |
         options=""
         if [[ ${{ inputs.parse }} == true ]]; then
-          options=" --parse"
+          options="--parse"
         fi
 
         if [[ ${{ inputs.pytest }} == true ]]; then
-          options=" --pytest --pytest-file ${{ inputs.pytest-file }}"
+          options="--pytest --pytest-file ${{ inputs.pytest-file }}"
         fi
 
         if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
-          options=" --parse --pytest --pytest-file ${{ inputs.pytest-file }}"
+          options="--parse --pytest --pytest-file ${{ inputs.pytest-file }}"
         fi
         echo $options
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
@@ -75,7 +75,7 @@ runs:
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy --dags ${{steps.deploy-options.ouputs.OPTIONS}}
+        astro deploy --dags ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
@@ -84,9 +84,9 @@ runs:
         curl -sSL https://install.astronomer.io | sudo bash -s
 
         if [[ ${{ inputs.force }} == true ]]; then
-          astro deploy ${{steps.deploy-options.ouputs.OPTIONS}} -f
+          astro deploy ${{steps.deploy-options.outputs.OPTIONS}} -f
         else
-          astro deploy ${{steps.deploy-options.ouputs.OPTIONS}}
+          astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
         fi
       shell: bash
   
