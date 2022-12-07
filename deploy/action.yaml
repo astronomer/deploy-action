@@ -53,15 +53,15 @@ runs:
       run: |
         options=$()
         if [[ ${{ inputs.parse }} == true ]]; then
-          options=$( --parse)
+          options= --parse
         fi
 
         if [[ ${{ inputs.pytest }} == true ]]; then
-          options=$( --pytest --pytest-file ${{ inputs.pytest-file }})
+          options= --pytest --pytest-file ${{ inputs.pytest-file }}
         fi
 
         if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
-          options=$( --parse --pytest --pytest-file ${{ inputs.pytest-file }})
+          options= --parse --pytest --pytest-file ${{ inputs.pytest-file }}
         fi
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
       shell: bash
