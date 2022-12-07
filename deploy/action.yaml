@@ -35,7 +35,7 @@ runs:
 
         for file in $files; do
           if [[ $file != "${{ inputs.dag-folder }}"* ]]; then
-            echo ($file is not a dag, triggering a full image build)
+            echo $file is not a dag, triggering a full image build
             dags_only=0
             break
           fi
