@@ -23,7 +23,7 @@ inputs:
   force:
     required: false
     default: false
-    description: "Will force deploy your code to Astornomer. Skips parse test on image deploys."
+    description: "If true your code will be force deployedto Astornomer. Mostly uesd to skip parse test on image deploys."
 runs:
   using: "composite"
   steps:
@@ -61,11 +61,11 @@ runs:
         fi
 
         if [[ ${{ inputs.pytest }} == true ]]; then
-          options="--pytest --pytest-file ${{ inputs.pytest-file }}"
+          options="--pytest --test ${{ inputs.pytest-file }}"
         fi
 
         if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
-          options="--parse --pytest --pytest-file ${{ inputs.pytest-file }}"
+          options="--parse --pytest --test ${{ inputs.pytest-file }}"
         fi
         echo $options
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
