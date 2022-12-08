@@ -67,7 +67,6 @@ runs:
         if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
           options="--parse --pytest --test ${{ inputs.pytest-file }}"
         fi
-        echo $options
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
       shell: bash
       id: deploy-options
