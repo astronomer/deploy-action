@@ -99,7 +99,7 @@ steps:
 In the following example custom image is built and deployed to an Astro Deployment using the `docker/build-push-action` and `astronomer/deploy-action`.
 
 ```
-ame: Astronomer CI - Additional build-time args
+name: Astronomer CI - Additional build-time args
 
 on:
   push:
