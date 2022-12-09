@@ -24,6 +24,10 @@ inputs:
     required: false
     default: false
     description: "If true your code will be force deployedto Astornomer. Mostly uesd to skip parse test on image deploys."
+  image-name:
+    required: false
+    default: no-custom-image
+    description: Specify a custom built image to deploy to an Asto Deployment.
 runs:
   using: "composite"
   steps:
@@ -56,17 +60,27 @@ runs:
     - name: setup deploy options
       run: |
         options=""
+
+        # add parse option
         if [[ ${{ inputs.parse }} == true ]]; then
           options="--parse"
         fi
 
+        # add pytest option
         if [[ ${{ inputs.pytest }} == true ]]; then
-          options="--pytest --test ${{ inputs.pytest-file }}"
+          options="$options --pytest --test ${{ inputs.pytest-file }}"
         fi
 
-        if [[ ${{ inputs.parse }} == true && ${{ inputs.pytest }} == true ]]; then
-          options="--parse --pytest --test ${{ inputs.pytest-file }}"
+        # add custom image option
+        if [[ ${{ inputs.image-name }} != no-custom-image ]]; then
+          options="$options --image-name ${{ inputs.image-name }}"
         fi
+        
+        # add force option
+        if [[ ${{ inputs.force }} == true ]]; then
+          options="$options --force"
+        fi
+
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
       shell: bash
       id: deploy-options
@@ -74,18 +88,13 @@ runs:
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
-
-        if [[ ${{ inputs.force }} == true ]]; then
-          astro deploy ${{steps.deploy-options.outputs.OPTIONS}} -f
-        else
-          astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
-        fi
+        astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
   

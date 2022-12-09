@@ -1,12 +1,7 @@
-# Astronomer Actions
-Custom Github Actions to create CI/CD pipelines for Astro. See [Astornomer's CI/CD documentation](https://docs.astronomer.io/astro/ci-cd) page for more information on creating CI/CD pipelines to deploy code to Astro Deployments.
+# Astronomer Deploy Action
+Custom Github Action to create CI/CD pipelines that deploys Airflow code to Astro Airflow Deployments during a CI/CD workflow. See [Astornomer's CI/CD documentation](https://docs.astronomer.io/astro/ci-cd) page for more information on creating CI/CD pipelines for Astro.
 
-This repo contains the following Custom Github Actions:
-- Deploy
-
-## Deploy Action
-
-Deploys your Astro project to an Astro Cloud Deployment during a CI/CD workflow. This action should be used with a github ations workflow that runs when code is merged into a "main"(or equivalent) branch. Works with DAG-Only Deploys enabled or disabled. Enabling Dag-Only Deploys will skip an image deploy if only files in `/dags` folder change. More information can be found in Astronomer's ][DAG-only Deploys documentation](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only[]).
+This action should be used with a github ations workflow that runs when code is merged into a "main"(or equivalent) branch. Works with DAG-Only Deploys enabled or disabled. Enabling Dag-Only Deploys will skip an image deploy if only files in `/dags` folder change. More information can be found in Astronomer's ][DAG-only Deploys documentation](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
 
 This action will execute the following steps if DAG:
 1. Checkout your current repo
@@ -30,7 +25,8 @@ You can configure the Deploy Actions behavior through a few options. None of the
 3. **parse**: If true DAGs will be parsed before deploying to Astro.
 4. **pytest**: if true custom Pytests will be ran before deploying to Astro.
 5. **pytest-file**: Specify custom Pytest files to run with the pytest command. For example you could specify the test `/tests/test-tags.py`. By default this option is blank and all Pytests in located in the repo will be run
-6. **force**: If true your code will be force deployedto Astornomer. Mostly uesd to skip parse test on image deploys.
+6. **force**: If true your code will be force deployed to an Astro Deployment. Mostly uesd to skip parse test on image deploys.
+7. **image-name**: Specify a custom built image to deploy to an Asto Deployment.
 
 ### Example Workflow File
 
@@ -56,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/actions/deploy@v0.1
+      uses: astronomer/deploy-action@v0.1
       with:
         dag-deploy-enabled: true
         parse: true
@@ -68,7 +64,7 @@ In the following example the folder `/example-dags/dags` is specified as the DAG
 ```
 steps:
 - name: Deploy to Astro
-  uses: astronomer/actions/deploy@v0.1
+  uses: astronomer/deploy-action@v0.1
   with:
     dag-folder: /example-dags/dags/
 ```
@@ -80,7 +76,7 @@ In the following example the pytest located at `/tests/test-tags.py` runs before
 ```
 steps:
 - name: Deploy to Astro
-  uses: astronomer/actions/deploy@v0.1
+  uses: astronomer/deploy-action@v0.1
   with:
     pytest: true
     pytest-file: /tests/test-tags.py
@@ -93,8 +89,50 @@ In the following example the parse test is skipped because the user's code is fo
 ```
 steps:
 - name: Deploy to Astro
-  uses: astronomer/actions/deploy@v0.1
+  uses: astronomer/deploy-action@v0.1
   with:
     force: true
 ```
 
+### Example using a custom iamge
+
+In the following example custom image is built and deployed to an Astro Deployment using the `docker/build-push-action` and `astronomer/deploy-action`.
+
+```
+ame: Astronomer CI - Additional build-time args
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ASTRONOMER_KEY_ID: ${{ secrets.ASTRO_ACCESS_KEY_ID_DEV }}
+      ASTRONOMER_KEY_SECRET: ${{ secrets.ASTRO_SECRET_ACCESS_KEY_DEV }}
+    steps:
+    - name: Check out the repo
+      uses: actions/checkout@v3
+    - name: Create image tag
+      id: image_tag
+      run: echo ::set-output name=image_tag::astro-$(date +%Y%m%d%H%M%S)
+    - name: Build image
+      uses: docker/build-push-action@v2
+      with:
+        tags: ${{ steps.image_tag.outputs.image_tag }}
+        load: true
+        # Define your custom image's build arguments, contexts, and connections here using
+        # the available GitHub Action settings:
+        # https://github.com/docker/build-push-action#customizing .
+        # This example uses `build-args` , but your use case might require configuring
+        # different values.
+        build-args: |
+          <your-build-arguments>
+    - name: Deploy to Astro
+      uses: astronomer/deploy-action@v0.1
+      with:
+        image-name: ${{ steps.image_tag.outputs.image_tag }}
+      
+```
