@@ -21,7 +21,7 @@ The Deploy Action is designed to be used with [Deployment API keys](https://docs
 You can configure the Deploy Actions behavior through a few options. None of the options are required.
 
 1. **dag-deploy-enabled**: If true only DAGs will be deployed when only DAG files are changed. Only make true if DAG Deploys has been enabled for the Deployment you are deploying to.
-2. **dag-folder**: Specify the location of the DAG folder. The DAG folder location is `./dags` by default.
+2. **root-folder**: Specify the path to to Astro project folder that contains that 'dags' folder. The root folder is "./" by default.
 3. **parse**: If true DAGs will be parsed before deploying to Astro.
 4. **pytest**: if true custom Pytests will be ran before deploying to Astro.
 5. **pytest-file**: Specify custom Pytest files to run with the pytest command. For example you could specify the test `/tests/test-tags.py`. By default this option is blank and all Pytests in located in the repo will be run

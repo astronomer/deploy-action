@@ -5,10 +5,10 @@ inputs:
     required: false
     default: false
     description: "If true only DAGs will be deployed when dag files are pushed."
-  dag-folder:
+  root-folder:
     required: false
-    default: dags/
-    description: "Path to dag folder."
+    default: ./
+    description: "Path to to Astro project folder that contains that 'dags' folder"
   parse:
     required: false
     default: false
@@ -36,13 +36,16 @@ runs:
       with:
         fetch-depth: 2
     # Determine if only DAGs have changes 
+    - name: Switch to root folder
+      run: |
+        cd ${{ inputs.root-folder }}
     - name: Get Deployment Type
       run: |
         files=$(git diff --name-only HEAD^..HEAD)
         dags_only=1
 
         for file in $files; do
-          if [[ $file != "${{ inputs.dag-folder }}"* ]]; then
+          if [[ $file != "dags/"* ]]; then
             echo $file is not a dag, triggering a full image build
             dags_only=0
             break
