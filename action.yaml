@@ -36,12 +36,9 @@ runs:
       with:
         fetch-depth: 2
     # Determine if only DAGs have changes 
-    - name: Switch to root folder
-      run: |
-        cd ${{ inputs.root-folder }}
-      shell: bash
     - name: Get Deployment Type
       run: |
+        cd ${{ inputs.root-folder }}
         files=$(git diff --name-only HEAD^..HEAD)
         dags_only=1
 
@@ -91,6 +88,7 @@ runs:
     - name: DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
+        cd ${{ inputs.root-folder }}
         curl -sSL https://install.astronomer.io | sudo bash -s
         astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
@@ -98,6 +96,7 @@ runs:
     - name: Image and DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
+        cd ${{ inputs.root-folder }}
         curl -sSL https://install.astronomer.io | sudo bash -s
         astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
