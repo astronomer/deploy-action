@@ -39,6 +39,7 @@ runs:
     - name: Switch to root folder
       run: |
         cd ${{ inputs.root-folder }}
+      shell: bash
     - name: Get Deployment Type
       run: |
         files=$(git diff --name-only HEAD^..HEAD)
