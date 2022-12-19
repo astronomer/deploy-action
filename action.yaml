@@ -90,7 +90,7 @@ runs:
       run: |
         cd ${{ inputs.root-folder }}
         curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
+        astro deploy --dags ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
