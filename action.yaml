@@ -43,7 +43,7 @@ runs:
         dags_only=1
 
         for file in $files; do
-          if [[ $file != "dags/"* ]]; then
+          if [[ $file != *"dags/"* ]]; then
             echo $file is not a dag, triggering a full image build
             dags_only=0
             break
