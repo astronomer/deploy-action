@@ -1,4 +1,4 @@
-name: "Deploy Airflow code to an Astro Cloud Dpeloyment"
+name: "Deploy Airflow code to an Astro Cloud Deployment"
 description: "Deploys your Astro project to an Astro Cloud Deployment. Works with DAG-Only Deploys enabled or disabled."
 inputs:
   dag-deploy-enabled:
