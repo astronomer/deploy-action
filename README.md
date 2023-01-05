@@ -3,7 +3,7 @@ Custom Github Action to create CI/CD pipelines that deploys Airflow code to Astr
 
 This action should be used with a github ations workflow that runs when code is merged into a "main"(or equivalent) branch. Works with DAG-Only Deploys enabled or disabled. Enabling Dag-Only Deploys will skip an image deploy if only files in `/dags` folder change. More information can be found in Astronomer's ][DAG-only Deploys documentation](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
 
-This action will execute the following steps if DAG:
+This action will execute the following steps:
 1. Checkout your current repo
 2. Determine if only DAG code changed
 2. Build your Astro Project into an image if files outside the `/dags` folder changed
