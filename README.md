@@ -22,13 +22,13 @@ You can configure the Deploy Actions behavior through a few options. None of the
 
 | Name | Default | Description |
 | ---|---|--- |
-| `dag-deploy-enabled` | | If true only DAGs will be deployed when only DAG files are changed. Only make true if DAG Deploys has been enabled for the Deployment you are deploying to. |
-| `root-folder` | | Specify the path to to Astro project folder that contains that 'dags' folder. The root folder is "./" by default | 
-| `parse` | | If true DAGs will be parsed before deploying to Astro |
-| `pytest` | | If true pytests will be ran before deploying to Astro |
-| `pytest-file` | | Specify custom Pytest files to run with the pytest command. For example you could specify the test `/tests/test-tags.py`. By default this option is blank and all Pytests in located in the repo will be run
-| `force` | | If true your code will be force deployed to an Astro Deployment. Mostly uesd to skip parse test on image deploys.
-| `image-name` | | Specify a custom built image to deploy to an Asto Deployment |
+| `dag-deploy-enabled` | `false` | If true, only DAG files will be deployed when only DAG files are changed. __Only set this to true if DAG Deploys has been enabled for the Deployment you are deploying to__ |
+| `root-folder` | `.` | Specify the path to to Astro project folder that contains that 'dags' folder | 
+| `parse` | `false` | If true, DAGs will be parsed for errors before deployment |
+| `pytest` | `false` | If true, pytests will run before deployment |
+| `pytest-file` | (all tests run) | Specify custom pytest files to run with the pytest command. For example, you could specify `/tests/test-tags.py`
+| `force` | `false` | If true, your code will be force deployed, which skips tests and DAG parsing
+| `image-name` |  | Specify a custom locally built image to deploy |
 
 
 ### Example Workflow File
