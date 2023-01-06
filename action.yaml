@@ -1,5 +1,8 @@
 name: "Deploy Airflow code to an Astro Cloud Deployment"
 description: "Deploys your Astro Airflow project to an Astro Cloud Deployment. Works with DAG-Only Deploys enabled or disabled."
+branding:
+    icon: 'upload-cloud'
+    color: 'purple'
 inputs:
   dag-deploy-enabled:
     required: false
