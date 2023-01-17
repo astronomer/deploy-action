@@ -1,41 +1,41 @@
-# Astronomer Deploy Action
-Custom Github Action to create CI/CD pipelines that deploys Airflow code to Astro Airflow Deployments during a CI/CD workflow. See [Astronomer's CI/CD documentation](https://docs.astronomer.io/astro/ci-cd) page for more information on creating CI/CD pipelines for Astro.
+# Deploy Action
+You use Deploy Action to create CI/CD pipelines that automate the deployment of code changes to a Deployment. For more information about Astro CI/CD workflows, see [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd).
 
-This action should be used with a Github Actions workflow that runs when code is merged into `main` (or equivalent) branch. Works with DAG-Only Deploys enabled or disabled. Enabling Dag-Only Deploys will skip an image deploy if only files in `/dags` folder change. More information can be found in Astronomer's [DAG-only Deploys documentation](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
+Deploy Action should only be used in a GitHub Actions workflow that runs when code is merged into a `main` or an equivalent branch. You can use the Deploy Action with DAG-only deploys activated or deactivated. When DAG-only deploys are activated, an image deploy is not completed when only the files in the `/dags` folder change. For more information about DAG-only deploys, see [Deploy DAGs only](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
 
-This action will execute the following steps:
-1. Checkout your current repo
-2. Determine if only DAG code changed
-2. Build your Astro Project into an image if files outside the `/dags` folder changed
-3. Parse or Pytest your DAG code (optional)
-4. Push your image to Astro's image Registry if files outside the `/dags` folder changed
-5. Deploy your image to your Astro Deployment if files outside the `/dags` folder changed
-6. Deploy only your `dags/` folder to your Astronomer Deployment if only files inside the `/dags` folder changed
+The following is the workflow for the custom GitHub Deploy Action:
+- Your current repository is checked out
+- It is determined if only DAG code changed
+- Your Astro project is built into an image when you change files outside the `/dags` folder
+- Optional. Your DAG code is parsed or tested with Pytest
+- Your image is pushed to the Astro image registry if you changed files outside the `/dags` folder
+- Your image is deployed to your Deployment if you changed files outside the `/dags` folder
+- Your `dags/` folder is deployed to your Deployment if you changed files inside the `/dags` folder
 
-### Usage
+## Usage
 
-The Deploy Action is designed to be used with [Deployment API keys](https://docs.astronomer.io/astro/api-keys). You must have your `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` set as environment variables in your Github Actions Workflow for this command to work. We recommend doing this through Github Actions secrets. For an example workflow script scroll down to the Examples section. The action uses these keys to login to Astro and determine what Deployment to deploy to. 
+Deploy Action is intended to be used with [Deployment API keys](https://docs.astronomer.io/astro/api-keys). To use Deploy Action, you need to set the `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variables in your GitHub Actions workflow. The environment variables define how to log in to Astro and what Deployment to deploy changes to. Astronomer recommends using GitHub Actions secrets to set the environment variables. An example workflow script is provided in the **Examples** section. 
 
-#### Inputs
+## Configuration options
 
-You can configure the Deploy Actions behavior through a few options. None of the options are required.
+The following table lists the optional configuration options for Deploy Actions.
 
 | Name | Default | Description |
 | ---|---|--- |
-| `dag-deploy-enabled` | `false` | If true, only DAG files will be deployed when only DAG files are changed. __Only set this to true if DAG Deploys has been enabled for the Deployment you are deploying to__ |
-| `root-folder` | `.` | Specify the path to to Astro project folder that contains that 'dags' folder | 
-| `parse` | `false` | If true, DAGs will be parsed for errors before deployment |
-| `pytest` | `false` | If true, pytests will run before deployment |
-| `pytest-file` | (all tests run) | Specify custom pytest files to run with the pytest command. For example, you could specify `/tests/test-tags.py`
-| `force` | `false` | If true, your code will be force deployed, which skips tests and DAG parsing
-| `image-name` |  | Specify a custom locally built image to deploy |
+| `dag-deploy-enabled` | `false` | When set to `true`, DAG files are deployed only when the DAG files are changed. Only set this to `true` when DAG-only deploys are activated on the Deployment you are deploying to. |
+| `root-folder` | `.` | Specifies the path to to Astro project folder containing the 'dags' folder | 
+| `parse` | `false` | When set to `true`, DAGs are parsed for errors before deployment |
+| `pytest` | `false` | When set to `true`, pytests are run before deployment |
+| `pytest-file` | (all tests run) | Specifies the custom pytest files to run with the pytest command. For example, you could specify `/tests/test-tags.py`
+| `force` | `false` | When set to `true`, your code is force deployed without testing or parsing
+| `image-name` |  | Specifies a custom, locally built image to deploy |
 
 
-### Example Workflow File
+## Deploy code example
 
-The following example shows how the Deploy Action can be uesd to deploy your code to an Astro Deployment whenever code is pushed to the main branch of your projects repository. The ASTRONOMER_KEY_ID and ASTRONOMER_KEY_SECRET values come from your [Deployment API key](https://docs.astronomer.io/astro/api-keys).
+The following example shows how to use Deploy Action to deploy your code to an Astro Deployment whenever code is pushed to the main branch of your projects repository. The `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variable values come from your [Deployment API key](https://docs.astronomer.io/astro/api-keys).
 
-In this particular example DAG deploys are enabled are enabled and DAG files are being parsed in both image and DAG Deploys.
+In the following example, DAG-only deploys are enabled and DAG files are parsed in both image and DAG deploys.
 
 ```
 name: Astronomer CI - Deploy code
@@ -60,9 +60,9 @@ jobs:
         dag-deploy-enabled: true
         parse: true
 ```
-### Change DAG Folder Example
+### Change the DAG folder
 
-In the following example the folder `/example-dags/dags` is specified as the DAG folder.
+In the following example, the folder `/example-dags/dags` is specified as the DAG folder.
 
 ```
 steps:
@@ -72,9 +72,9 @@ steps:
     dag-folder: /example-dags/dags/
 ```
 
-### Example using Pytests
+### Run Pytests
 
-In the following example the pytest located at `/tests/test-tags.py` runs before the image is deployed. 
+In the following example, the pytest located at `/tests/test-tags.py` runs before the image is deployed. 
 
 ```
 steps:
@@ -85,9 +85,9 @@ steps:
     pytest-file: /tests/test-tags.py
 ```
 
-### Example using force
+### Ignore parsing and testing
 
-In the following example the parse and pytests are skipped because the `--force` flag is enabled.
+In the following example, the parse and pytests are skipped.
 
 ```
 steps:
@@ -97,9 +97,9 @@ steps:
     force: true
 ```
 
-### Example using a custom iamge
+### Use a custom image
 
-In the following example custom image is built and deployed to an Astro Deployment using the `docker/build-push-action` and `astronomer/deploy-action`.
+In the following example, a custom image is built and deployed to an Astro Deployment.
 
 ```
 name: Astronomer CI - Additional build-time args
