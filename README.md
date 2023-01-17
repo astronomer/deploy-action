@@ -3,7 +3,7 @@ You use Deploy Action to create CI/CD pipelines that automate the deployment of 
 
 Deploy Action should only be used in a GitHub Actions workflow that runs when code is merged into a `main` or an equivalent branch. You can use the Deploy Action with DAG-only deploys activated or deactivated. When DAG-only deploys are activated, an image deploy is not completed when only the files in the `/dags` folder change. For more information about DAG-only deploys, see [Deploy DAGs only](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
 
-The following is the workflow for the custom GitHub Deploy Action:
+The following is the workflow for Deploy Action:
 - Your current repository is checked out
 - It is determined if only DAG code changed
 - Your Astro project is built into an image when you change files outside the `/dags` folder
