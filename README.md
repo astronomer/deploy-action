@@ -14,7 +14,7 @@ The following is the workflow for Deploy Action:
 
 ## Usage
 
-Deploy Action is intended to be used with [Deployment API keys](https://docs.astronomer.io/astro/api-keys). To use Deploy Action, you need to set the `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variables in your GitHub Actions workflow. The environment variables define how to log in to Astro and what Deployment to deploy changes to. Astronomer recommends using GitHub Actions secrets to set the environment variables. An example workflow script is provided in the **Examples** section. 
+Deploy Action is intended to be used with [Deployment API keys](https://docs.astronomer.io/astro/api-keys). To use Deploy Action, you need to set the `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variables in your GitHub Actions workflow. The environment variables define how to log in to Astro and what Deployment to deploy changes to. Astronomer recommends using GitHub Actions secrets to set the environment variables. An example workflow script is provided in ** Deploy code example**. 
 
 ## Configuration options
 
