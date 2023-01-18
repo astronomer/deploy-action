@@ -33,7 +33,7 @@ The following table lists the optional configuration options for Deploy Actions.
 
 ## Deploy code example
 
-The following example shows how to use Deploy Action to deploy your code to an Astro Deployment whenever code is pushed to the main branch of your projects repository. The `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variable values come from your [Deployment API key](https://docs.astronomer.io/astro/api-keys).
+The following example shows how to use Deploy Action to deploy your code to an Astro Deployment whenever code is pushed to the main branch of your projects repository. The `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variable values are defined by your [Deployment API key](https://docs.astronomer.io/astro/api-keys).
 
 In the following example, DAG-only deploys are enabled and DAG files are parsed in both image and DAG deploys.
 
