@@ -35,7 +35,7 @@ The following table lists the optional configuration options for Deploy Actions.
 ## Workflow file examples
 
 
-In the following example, DAG-only deploys are enabled and DAG files are parsed for both image and DAG deploys.
+In the following example, DAG-only deploys are enabled and DAG files are parsed for both image and DAG deploys. Code is only pushed from a main branch when the workflow file is used.
 
 ```
 name: Astronomer CI - Deploy code
