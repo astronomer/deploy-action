@@ -1,7 +1,7 @@
 # Deploy to Astro
-This action deploys code from your GitHub repository to an Astro Deployment. It runs whenever you commit to your repository's main branch. For more information about Astro CI/CD workflows, see [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd).
+This action deploys code from your GitHub repository to an Astro Deployment. It runs as a step within a github workflow file. For more information about Astro CI/CD workflows, see [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd).
 
-This action can be used only to deploy code from `main` or an equivalent branch. To configure a CI/CD pipeline for multiple branches, see [Astronomer documentation](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). 
+This action can be used only to deploy code to deploy code to Astro Deployments. This README contains exmaples on how to use it to deploy code when changes are made to a main branch. To configure a CI/CD pipeline for multiple branches, see [Astronomer documentation](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). 
 
 You can use the Deploy Action with DAG-only deploys activated or deactivated. When DAG-only deploys are activated, the action does not rebuild and deploy your image when your commit only includes changes to the `/dags` folder. For more information about DAG-only deploys, see [Deploy DAGs only](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
 
