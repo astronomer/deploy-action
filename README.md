@@ -5,7 +5,7 @@ This action can only be used to deploy code to Astro Deployments. This README in
 
 You can use the Deploy Action with DAG-only deploys activated or deactivated. When DAG-only deploys are activated, the action does not rebuild and deploy your image when your commit only includes changes to the `/dags` folder. For more information about DAG-only deploys, see [Deploy DAGs only](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
 
-The action completes the following steps whenever you commit to your main branch:
+The action completes the following steps whenever your CI/CD pipeline is triggered:
 
 - Checks out your repository.
 - Checks whether your commit only changed DAG code.
@@ -35,7 +35,7 @@ The following table lists the optional configuration options for Deploy Actions.
 ## Workflow file examples
 
 
-In the following example, DAG-only deploys are enabled and DAG files are parsed for both image and DAG deploys. Code is only pushed from a main branch when the workflow file is used.
+In the following example, DAG-only deploys are enabled and DAG files are parsed for both image and DAG deploys. This workflow example deploys code when it is pushed into the main branch.
 
 ```
 name: Astronomer CI - Deploy code
