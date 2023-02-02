@@ -15,7 +15,7 @@ The action completes the following steps whenever you commit to your main branch
 
 ## Usage
 
-To use the action, you must set the `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variables in your GitHub Actions workflow to the Key ID and secret for an existing [Deployment API key](https://docs.astronomer.io/astro/api-keys). Astronomer recommends using GitHub Actions secrets to set these environment variables. An example workflow script is provided in **Workflow file example**. 
+To use the action, you must set the `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variables in your GitHub Actions workflow to the Key ID and secret for an existing [Deployment API key](https://docs.astronomer.io/astro/api-keys). Astronomer recommends using GitHub Actions secrets to set these environment variables. An example workflow script is provided in **Workflow file examples**. 
 
 ## Configuration options
 
