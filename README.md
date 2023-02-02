@@ -11,7 +11,7 @@ The action completes the following steps whenever you commit to your main branch
 - Checks whether your commit only changed DAG code.
 - Optional. Tests DAG code with pytest.
 - If the commit included only changes to DAG code, pushes the change to Astro without building a new project image.
-- If the change included changes to project configurations, rebuild your project image and deploy it to Astro.
+- If the change included changes to project configurations, rebuilds your project image and deploys it to Astro.
 
 ## Usage
 
