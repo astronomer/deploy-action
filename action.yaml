@@ -1,5 +1,5 @@
-name: "Deploy Airflow code to an Astro Cloud Deployment"
-description: "Deploys your Astro Airflow project to an Astro Cloud Deployment. Works with DAG-Only Deploys enabled or disabled."
+name: "Deploy Apache Airflow DAGs to Astro"
+description: "Test your DAGs and deploy your Astro project to a Deployment on Astro, Astronomer's managed Airflow service."
 branding:
     icon: 'upload-cloud'
     color: 'purple'
