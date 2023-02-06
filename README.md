@@ -30,10 +30,10 @@ Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
 1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.1`.
-2. Configure the GitHub action to fit your team's use case. This could include disabling DAG-only deploys or adding tests. See below for options.
-3. Make changes to your Astro project files in GitHub and let this action take care of deploying your code to Astro.
+2. Configure the workflow to fit your team's use case. This could include disabling DAG-only deploys or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
+3. Make changes to your Astro project files in GitHub and let this GitHub Actions workflow take care of deploying your code to Astro.
 
-Astronomer recommends setting up multiple environments on Astro. See the [Multiple branch GitHub Action](https://docs.astronomer.io/astro/ci-cd?tab=multibranch#github-actions-image-only-deploys).
+Astronomer recommends setting up multiple environments on Astro. See the [Multiple branch GitHub Actions workflow](https://docs.astronomer.io/astro/ci-cd?tab=multibranch#github-actions-image-only-deploys) in Astronomer documentation.
 
 This action can only be used to deploy code to Astro Deployments. This README includes examples of how you can use the action to deploy code when changes are made to a main branch. To configure a CI/CD pipeline for multiple branches, see [Astronomer documentation](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). 
 
@@ -53,17 +53,17 @@ To use the action, you must set the `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECR
 
 ## Configuration options
 
-The following table lists the optional configuration options for Deploy Actions.
+The following table lists the configuration options for the Deploy to Astro action.
 
 | Name | Default | Description |
 | ---|---|--- |
-| `dag-deploy-enabled` | `false` | When set to `true`, DAG files are deployed only when the DAG files are changed. Only set this to `true` when DAG-only deploys are activated on the Deployment you are deploying to. |
-| `root-folder` | `.` | Specifies the path to to Astro project folder containing the 'dags' folder | 
-| `parse` | `false` | When set to `true`, DAGs are parsed for errors before deployment |
-| `pytest` | `false` | When set to `true`, pytests are run before deployment |
-| `pytest-file` | (all tests run) | Specifies the custom pytest files to run with the pytest command. For example, you could specify `/tests/test-tags.py`|
-| `force` | `false` | When set to `true`, your code is force deployed without testing or parsing |
-| `image-name` |  | Specifies a custom, locally built image to deploy |
+| `dag-deploy-enabled` | `false` | When set to `true`, this action includes conditional logic that deploys only DAG files to Astro when only the DAGs directory changes. Only set this to `true` when the DAG-only deploy feature is enabled on your Astro Deployment. See [Deploy DAGs only](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only) |
+| `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder | 
+| `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro |
+| `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/test-and-troubleshoot-locally#run-tests-with-pytest) |
+| `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`|
+| `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors |
+| `image-name` | <custom-Docker-image-name> | Specifies a custom, locally built image to deploy |
 
 
 ## Workflow file examples
