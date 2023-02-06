@@ -35,21 +35,6 @@ To use this action, read [Automate code deploys with CI/CD](https://docs.astrono
 
 Astronomer recommends setting up multiple environments on Astro. See the [Multiple branch GitHub Actions workflow](https://docs.astronomer.io/astro/ci-cd?tab=multibranch#github-actions-image-only-deploys) in Astronomer documentation.
 
-This action can only be used to deploy code to Astro Deployments. This README includes examples of how you can use the action to deploy code when changes are made to a main branch. To configure a CI/CD pipeline for multiple branches, see [Astronomer documentation](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). 
-
-You can use the Deploy Action with DAG-only deploys activated or deactivated. When DAG-only deploys are activated, the action does not rebuild and deploy your image when your commit only includes changes to the `/dags` folder. For more information about DAG-only deploys, see [Deploy DAGs only](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only).
-
-The action completes the following steps whenever your CI/CD pipeline is triggered:
-
-- Checks out your repository.
-- Checks whether your commit only changed DAG code.
-- Optional. Tests DAG code with pytest.
-- If the commit included only changes to DAG code, pushes the change to Astro without building a new project image.
-- If the change included changes to project configurations, rebuilds your project image and deploys it to Astro.
-
-## Usage
-
-To use the action, you must set the `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET` environment variables in your GitHub Actions workflow to the Key ID and secret for an existing [Deployment API key](https://docs.astronomer.io/astro/api-keys). Astronomer recommends using GitHub Actions secrets to set these environment variables. An example workflow script is provided in **Workflow file examples**. 
 
 ## Configuration options
 
