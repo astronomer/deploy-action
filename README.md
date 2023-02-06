@@ -69,7 +69,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 ## Workflow file examples
 
 
-In the following example, DAG-only deploys are enabled and DAG files are parsed for both image and DAG deploys. This workflow example deploys code when it is pushed into the main branch.
+In the following example, the GitHub action deploys code to Astro with DAG-only deploys enabled. This example assumes that you have one Astro Deployment and one branch. When a change is merged to the `main` branch, your Astro project is deployed to Astro. DAG files are parsed on every deploy and no pytests are ran.
 
 ```
 name: Astronomer CI - Deploy code
@@ -111,7 +111,7 @@ steps:
 
 ### Run Pytests
 
-In the following example, the pytest located at `/tests/test-tags.py` runs before the image is deployed. 
+In the following example, the pytest located at `/tests/test-tags.py` runs before deploying to Astro.
 
 ```
 steps:
@@ -124,7 +124,7 @@ steps:
 
 ### Ignore parsing and testing
 
-In the following example, the parse and pytests are skipped.
+In the following example, `force` is enabled and both the DAG parse and pytest processes are skipped.
 
 ```
 steps:
@@ -134,9 +134,9 @@ steps:
     force: true
 ```
 
-### Use a custom image
+### Deploy a custom Docker image
 
-In the following example, a custom image is built and deployed to an Astro Deployment.
+In the following example, a custom Docker image is built and deployed to an Astro Deployment.
 
 ```
 name: Astronomer CI - Additional build-time args
