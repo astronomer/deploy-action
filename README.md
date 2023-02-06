@@ -1,19 +1,19 @@
 # Deploy to Astro
-This action automates deploying code from your GitHub repository to a Deployment on [Astro](https://www.astronomer.io/product/), Astronomer's data orchestration platform and managed service for Apache Airflow.
+This GitHub action automates deploying code from your GitHub repository to a Deployment on [Astro](https://www.astronomer.io/product/), Astronomer's data orchestration platform and managed service for Apache Airflow.
 
 You can use and configure this GitHub action to easily deploy Apache Airflow DAGs to an Airflow environment on Astro. Specifically, you can:
 
 - Avoid manually running `astro deploy` with the Astro CLI every time you make a change to your Astro project.
-- Automate deploying code to Astro when you changes to a certain branch in your repository are merged.
-- Incorporate unit tests for your DAGs as part of your deploy process.
+- Automate deploying code to Astro when you merge changes to a certain branch in your repository.
+- Incorporate unit tests for your DAGs as part of the deploy process.
 
 This GitHub action runs as a step within a GitHub workflow file. When your CI/CD pipeline is triggered, this action:
 
 - Checks out your GitHub repository.
 - Checks whether your commit only changed DAG code.
 - Optional. Tests DAG code with `pytest`. See [Run tests with pytest](https://docs.astronomer.io/astro/test-and-troubleshoot-locally#run-tests-with-pytest).
-- Runs `astro deploy --dags` if the commit only included changes to DAG code.
-- Run `astro deploy` if the commit included changes to project configurations.
+- Runs `astro deploy --dags` if the commit only includes DAG code changes.
+- Runs `astro deploy` if the commit includes project configuration changes.
 
 ## Prerequisites
 
@@ -23,13 +23,13 @@ To use this GitHub action, you need:
 - A Deployment on Astro. See [Create a Deployment](https://docs.astronomer.io/astro/create-deployment).
 - A Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
 
-Astronomer recommends using GitHub actions secrets to store `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET`. See the example in **Workflow file examples**. 
+Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET`. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples). 
 
 ## Use this action
 
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
-1. Create a GitHub workflow file in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.1`.
+1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.1`.
 2. Configure the GitHub action to fit your team's use case. This could include disabling DAG-only deploys or adding tests. See below for options.
 3. Make changes to your Astro project files in GitHub and let this action take care of deploying your code to Astro.
 
