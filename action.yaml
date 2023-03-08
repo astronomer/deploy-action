@@ -43,7 +43,7 @@ inputs:
     required: false
     default: false
     description: "If you are using an organization token you will need to provide a workspace-name or id."
-  preivew-name:
+  preview-name:
     required: false
     default: false
     description: "Custom preview name. By default this is branch name “_” deployment name"
@@ -89,8 +89,8 @@ runs:
             exit 1 # terminate and indicate error
           fi
 
-          if [[ ${{ inputs.preivew-name }} != false ]]; then
-            BRANCH_DEPLOYMENT_NAME=${{ inputs.preivew-name }})
+          if [[ ${{ inputs.preview-name }} != false ]]; then
+            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
 
           else 
             # get branch name
@@ -121,8 +121,8 @@ runs:
             exit 1 # terminate and indicate error
           fi
 
-          if [[ ${{ inputs.preivew-name }} != false ]]; then
-            BRANCH_DEPLOYMENT_NAME=${{ inputs.preivew-name }})
+          if [[ ${{ inputs.preview-name }} != false ]]; then
+            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
 
           else 
             DEPLOYMENT_NAME="$(./astro deployment inspect $DEPLOYMENT_ID --key configuration.name)"
@@ -144,8 +144,8 @@ runs:
             exit 1 # terminate and indicate error
           fi
 
-          if [[ ${{ inputs.preivew-name }} != false ]]; then
-            BRANCH_DEPLOYMENT_NAME=${{ inputs.preivew-name }})
+          if [[ ${{ inputs.preview-name }} != false ]]; then
+            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
 
           else 
             DEPLOYMENT_NAME="$(./astro deployment inspect $DEPLOYMENT_ID --key configuration.name)"
@@ -159,7 +159,7 @@ runs:
 
         # if action is deploy set final deployment id to deployment id
         if [[ ${{ inputs.action }} == deploy ]]; then
-          echo echo "FINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          echo "FINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
         fi
       shell: bash
       id: deployment-preview
