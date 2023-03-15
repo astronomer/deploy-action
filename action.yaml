@@ -58,7 +58,7 @@ runs:
     # Determine if only DAGs have changes
     - name: Install Astro
       run: |
-        curl -sSL https://install.astronomer.io | sudo bash -s
+        curl -sSL https://install.astronomer.io | sudo bash -s v1.12.0
     - name: Deployment Preview action
       run: |
 
@@ -226,7 +226,6 @@ runs:
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
         cd ${{ inputs.root-folder }}
-        curl -sSL https://install.astronomer.io | sudo bash -s
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
@@ -234,7 +233,6 @@ runs:
       if: steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
         cd ${{ inputs.root-folder }}
-        curl -sSL https://install.astronomer.io | sudo bash -s
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
   
