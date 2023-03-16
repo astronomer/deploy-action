@@ -112,6 +112,9 @@ runs:
 
           # Get deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
+
+          # don't skip deploy
+          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
         fi
 
         # delete deployment preview and skip deploy if action is delete-deployment-preview
@@ -156,11 +159,17 @@ runs:
 
           # Get deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
+
+          # don't skip deploy
+          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
         fi
 
         # if action is deploy set final deployment id to deployment id
         if [[ ${{ inputs.action }} == deploy ]]; then
           echo "FINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+          # don't skip deploy
+          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
         fi
       shell: bash
       id: deployment-preview
