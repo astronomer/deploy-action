@@ -64,7 +64,7 @@ runs:
       run: |
 
         # switch workspace if specified
-        if [[ ${{ inputs.workspace }} != false]]; then
+        if [[ ${{ inputs.workspace }} != false ]]; then
           astro workspace switch ${{ inputs.workspace }}
         fi
         # error if both deployment name and id are you used
