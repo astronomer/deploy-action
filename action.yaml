@@ -63,6 +63,9 @@ runs:
     - name: Deployment Preview action
       run: |
 
+        # don't skip deploy
+        echo "SKIP_DEPLOY=nothing" >> $GITHUB_OUTPUT
+
         # switch workspace if specified
         if [[ ${{ inputs.workspace }} != false ]]; then
           astro workspace switch ${{ inputs.workspace }}
@@ -186,7 +189,7 @@ runs:
           echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
         fi
 
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == nil ]]; then
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == nothing ]]; then
           echo ERROR: you specfied an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
           exit 1 # terminate and indicate error
         fi
