@@ -95,12 +95,13 @@ runs:
 
           else 
             # get branch name
-            BRANCH_NAME=${{ github.ref }}
-            echo "${{ github.ref }}"
+            BRANCH_NAME=${{ github.ref }} | tr / -
+            echo "${{ github.ref }} | tr / -"
             echo $BRANCH_NAME
             DEPLOYMENT_NAME="$(./astro deployment inspect $DEPLOYMENT_ID --key configuration.name)"
             BRANCH_DEPLOYMENT_NAME=$BRANCH_NAME_$DEPLOYMENT_NAME
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
+            echo $BRANCH_DEPLOYMENT_NAME
           fi
 
           # Create template of deployment to be copied with
