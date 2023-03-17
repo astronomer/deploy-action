@@ -95,10 +95,12 @@ runs:
 
           else 
             # get branch name
-            echo ${GITHUB_HEAD_REF##*/}
-            echo ${{ github.ref }}
+            branch_ref="${{ github.ref }}"
+            branch_name="${branch_ref##*/}"
+            echo $branch_name
+            echo ${branch_name}
             DEPLOYMENT_NAME="$(./astro deployment inspect $DEPLOYMENT_ID --key configuration.name)"
-            BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
+            BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
             echo $BRANCH_DEPLOYMENT_NAME
           fi
