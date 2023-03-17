@@ -179,6 +179,8 @@ runs:
       run: |
         if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false ]]; then
           echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
+        else
+          echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
         fi
       shell: bash
       id: dag-deploy-enabled
