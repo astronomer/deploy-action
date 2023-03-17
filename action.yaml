@@ -117,6 +117,9 @@ runs:
 
           # don't skip deploy
           echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
+
+          # image deploy only
+          echo "IMAGE_DEPLOY_ONLY=true" >> $GITHUB_OUTPUT
         fi
 
         # delete deployment preview and skip deploy if action is delete-deployment-preview
@@ -140,6 +143,9 @@ runs:
 
           # skip deploy
           echo "SKIP_DEPLOY=true" >> $GITHUB_OUTPUT
+
+          # not image deploy only
+          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
         fi
         
         # # deploy to deployment preview if action is cdeploy-deployment-preview
@@ -164,6 +170,9 @@ runs:
 
           # don't skip deploy
           echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
+          
+          # not image deploy only
+          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
         fi
 
         # if action is deploy set final deployment id to deployment id
@@ -172,12 +181,20 @@ runs:
 
           # don't skip deploy
           echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
+
+          # not image deploy only
+          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+        fi
+
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == nil ]]; then
+          echo ERROR: you specfied an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
+          exit 1 # terminate and indicate error
         fi
       shell: bash
       id: deployment-preview
     - name: Determine if DAG Deploy is enabled
       run: |
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false ]]; then
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false || ${{steps.deployment-preview.outputs.IMAGE_DEPLOY_ONLY}} == true ]]; then
           echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
         else
           echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
