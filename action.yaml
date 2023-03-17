@@ -209,7 +209,7 @@ runs:
       id: deployment-preview
     - name: Determine if DAG Deploy is enabled
       run: |
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false || ${{steps.deployment-preview.outputs.IMAGE_DEPLOY_ONLY}} == false ]]; then
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false && ${{steps.deployment-preview.outputs.IMAGE_DEPLOY_ONLY}} == false ]]; then
           echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
         else
           echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
