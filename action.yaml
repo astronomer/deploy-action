@@ -63,7 +63,7 @@ runs:
     - name: Deployment Preview action
       run: |
 
-        # don't skip deploy
+        # set skip deploy to nothing at first
         echo "SKIP_DEPLOY=nothing" >> $GITHUB_OUTPUT
 
         # switch workspace if specified
