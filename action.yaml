@@ -97,8 +97,6 @@ runs:
             # get branch name
             branch_ref="${{ github.ref }}"
             branch_name="${branch_ref##*/}"
-            echo $branch_name
-            echo ${branch_name}
             DEPLOYMENT_NAME="$(./astro deployment inspect $DEPLOYMENT_ID --key configuration.name)"
             BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
@@ -179,7 +177,9 @@ runs:
       id: deployment-preview
     - name: Determine if DAG Deploy is enabled
       run: |
-        echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false ]]; then
+          echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
+        fi
       shell: bash
       id: dag-deploy-enabled
     - name: Get Deployment Type
