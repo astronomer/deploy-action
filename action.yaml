@@ -63,8 +63,8 @@ runs:
     - name: Deployment Preview action
       run: |
 
-        # set skip deploy to nothing at first
-        echo "SKIP_DEPLOY=nothing" >> $GITHUB_OUTPUT
+        # set action
+        ACTION=nothing
 
         # switch workspace if specified
         if [[ ${{ inputs.workspace }} != false ]]; then
@@ -123,6 +123,9 @@ runs:
 
           # image deploy only
           echo "IMAGE_DEPLOY_ONLY=true" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=create
         fi
 
         # delete deployment preview and skip deploy if action is delete-deployment-preview
@@ -149,6 +152,9 @@ runs:
 
           # not image deploy only
           echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=delete
         fi
         
         # # deploy to deployment preview if action is cdeploy-deployment-preview
@@ -176,6 +182,9 @@ runs:
           
           # not image deploy only
           echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=deploy-preview
         fi
 
         # if action is deploy set final deployment id to deployment id
@@ -187,9 +196,12 @@ runs:
 
           # not image deploy only
           echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=deploy
         fi
 
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == nothing ]]; then
+        if [[ $ACTION == nothing ]]; then
           echo ERROR: you specfied an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
           exit 1 # terminate and indicate error
         fi
