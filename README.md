@@ -6,10 +6,12 @@ You can use and configure this GitHub action to easily deploy Apache Airflow DAG
 - Avoid manually running `astro deploy` with the Astro CLI every time you make a change to your Astro project.
 - Automate deploying code to Astro when you merge changes to a certain branch in your repository.
 - Incorporate unit tests for your DAGs as part of the deploy process.
+- Create/delete a Deployment Preview. A Deployment Preveiw is an Astro Deployment that mirrors the configuration of your orginal Deployment. 
 
 This GitHub action runs as a step within a GitHub workflow file. When your CI/CD pipeline is triggered, this action:
 
 - Checks out your GitHub repository.
+- Optionaly create or delete a Deployment Preview to test your code changes on before deploying to production.
 - Checks whether your commit only changed DAG code.
 - Optional. Tests DAG code with `pytest`. See [Run tests with pytest](https://docs.astronomer.io/astro/test-and-troubleshoot-locally#run-tests-with-pytest).
 - Runs `astro deploy --dags` if the commit only includes DAG code changes.
@@ -21,16 +23,17 @@ To use this GitHub action, you need:
 
 - An Astro project. See [Create a project](https://docs.astronomer.io/astro/create-project).
 - A Deployment on Astro. See [Create a Deployment](https://docs.astronomer.io/astro/create-deployment).
-- A Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
+- A Deployment API Token. See [API Tokens]()
+- Or a Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
 
-Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRONOMER_KEY_ID` and `ASTRONOMER_KEY_SECRET`. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples). 
+Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRO_API_TOKEN` or Deployment API Keys. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples). 
 
 ## Use this action
 
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
 1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.1`.
-2. Configure the workflow to fit your team's use case. This could include disabling DAG-only deploys or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
+2. Configure the workflow to fit your team's use case. This could include creating a deployment preview or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
 3. Make changes to your Astro project files in GitHub and let this GitHub Actions workflow take care of deploying your code to Astro.
 
 Astronomer recommends setting up multiple environments on Astro. See the [Multiple branch GitHub Actions workflow](https://docs.astronomer.io/astro/ci-cd?tab=multibranch#github-actions-image-only-deploys) in Astronomer documentation.
@@ -42,19 +45,23 @@ The following table lists the configuration options for the Deploy to Astro acti
 
 | Name | Default | Description |
 | ---|---|--- |
-| `dag-deploy-enabled` | `false` | When set to `true`, this action includes conditional logic that deploys only DAG files to Astro when only the DAGs directory changes. Only set this to `true` when the DAG-only deploy feature is enabled on your Astro Deployment. See [Deploy DAGs only](https://docs.astronomer.io/astro/deploy-code#deploy-dags-only) |
-| `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder | 
+| `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. Don't sepcify anything if you are deploying to a regular deployment |
+| `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too |
+| `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
+| `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/test-and-troubleshoot-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`|
 | `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors |
-| `image-name` | <custom-Docker-image-name> | Specifies a custom, locally built image to deploy |
+| `image-name` | | Specifies a custom, locally built image to deploy |
+| `workspace` | `false` | If you are using an organization token you will need to provide a workspace-name or id |
+| `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name |
 
 
 ## Workflow file examples
 
 
-In the following example, the GitHub action deploys code to Astro with DAG-only deploys enabled. This example assumes that you have one Astro Deployment and one branch. When a change is merged to the `main` branch, your Astro project is deployed to Astro. DAG files are parsed on every deploy and no pytests are ran.
+In the following example, the GitHub action deploys code to Astro. This example assumes that you have one Astro Deployment and one branch. When a change is merged to the `main` branch, your Astro project is deployed to Astro. DAG files are parsed on every deploy and no pytests are ran.
 
 ```
 name: Astronomer CI - Deploy code
@@ -65,9 +72,8 @@ on:
       - main
 
 env:
-  ## Sets Deployment API key credentials as environment variables
-  ASTRONOMER_KEY_ID: ${{ secrets.ASTRONOMER_KEY_ID }}
-  ASTRONOMER_KEY_SECRET: ${{ secrets.ASTRONOMER_KEY_SECRET }}
+  ## Set API Token as an environment variable
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
 
 jobs:
   deploy:
@@ -76,7 +82,7 @@ jobs:
     - name: Deploy to Astro
       uses: astronomer/deploy-action@v0.1
       with:
-        dag-deploy-enabled: true
+        deployment-id: <deployment id>
         parse: true
 ```
 
@@ -91,6 +97,7 @@ steps:
 - name: Deploy to Astro
   uses: astronomer/deploy-action@v0.1
   with:
+    deployment-id: <deployment id>
     dag-folder: /example-dags/dags/
 ```
 
@@ -103,6 +110,7 @@ steps:
 - name: Deploy to Astro
   uses: astronomer/deploy-action@v0.1
   with:
+    deployment-id: <deployment id>
     pytest: true
     pytest-file: /tests/test-tags.py
 ```
@@ -116,6 +124,7 @@ steps:
 - name: Deploy to Astro
   uses: astronomer/deploy-action@v0.1
   with:
+    deployment-id: <deployment id>
     force: true
 ```
 
@@ -135,8 +144,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      ASTRONOMER_KEY_ID: ${{ secrets.ASTRO_ACCESS_KEY_ID_DEV }}
-      ASTRONOMER_KEY_SECRET: ${{ secrets.ASTRO_SECRET_ACCESS_KEY_DEV }}
+      ## Set API Token as an environment variable
+      ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN
     steps:
     - name: Check out the repo
       uses: actions/checkout@v3
@@ -158,6 +167,139 @@ jobs:
     - name: Deploy to Astro
       uses: astronomer/deploy-action@v0.1
       with:
+        deployment-id: <deployment id>
         image-name: ${{ steps.image_tag.outputs.image_tag }}
       
+```
+
+## Deployment Preview Templates
+
+This section contains four workflow files that you will need in your repository to have a full Deployment Preview Cycle running for your Deployment. A Deployment Preview is an Astro Deployment that mirrors the configuration of your original Deployment. This Deployment Preview can be used to test your new pipelines changes before pushing them to your orginal Deployment. The scripts below will take your pipeline changes through the following flow:
+
+1. When a new branch is created a Deployment Preview will be created based off your orginal Deployment
+2. When a PR is created from a branch code changes will be deployed to the Deployment Preivew
+3. When a PR is merged into your "main" branch code changes will be deployed to the orginal Deployment
+4. When a branch is deleted the the corresponding Deployment Preview will also be deleted
+
+## Create Deployment Preivew
+
+```
+name: Astronomer CI - Create deployment preview
+
+on:
+  create:
+    branches:
+    - "**"
+
+env:
+  ## Sets Deployment API key credentials as environment variables
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create Deployment Preivew
+      uses: astronomer/deploy-action@v0.2
+      with:
+        action: create-deployment-preview
+        deployment-id: <orginal deployment id>
+```
+
+## Deploy to Deployment Preview
+
+```
+name: Astronomer CI - Deploy code to Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  ## Sets Deployment API key credentials as environment variables
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deploy to Deployment Preivew
+      uses: astronomer/deploy-action@v0.2
+      with:
+        action: deploy-deployment-preview
+        deployment-id: <orginal deployment id>
+```
+
+## Delete Deployment Preview
+
+```
+name: Astronomer CI - Delete Deployment Preview
+
+on:
+  delete:
+    branches:
+    - "**"
+
+env:
+  ## Sets Deployment API key credentials as environment variables
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create Deployment Preivew
+      uses: astronomer/deploy-action@v0.2
+      with:
+        action: delete-deployment-preview
+        deployment-id: <orginal deployment id>
+```
+
+## Deploy to Orginal Deployment
+
+```
+name: Astronomer CI - Deploy code to Astro
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ## Sets Deployment API key credentials as environment variables
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deploy to Astro
+      uses: astronomer/deploy-action@v0.2
+      with:
+        deployment-id: <orginal deployment id>
+```
+## Delete Deployment Preview
+
+```
+name: Astronomer CI - Delete Deployment Preview
+
+on:
+  delete:
+    branches:
+    - "**"
+
+env:
+  ## Sets Deployment API key credentials as environment variables
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create Deployment Preivew
+      uses: astronomer/deploy-action@v0.2
+      with:
+        action: delete-deployment-preview
+        deployment-id: <orginal deployment id>
 ```

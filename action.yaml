@@ -30,7 +30,7 @@ inputs:
   action:
     required: false
     default: deploy
-    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', delete-deployment-preview' or `deploy-deployment-preview`. Don't sepcify anything if you are deployment to a regular deployment."
+    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't sepcify anything if you are deploying to a regular deployment."
   deployment-name:
     required: false
     default: false
