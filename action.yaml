@@ -58,7 +58,7 @@ runs:
     # Determine if only DAGs have changes
     - name: Install Astro
       run: |
-        curl -sSL https://install.astronomer.io | sudo bash -s v1.12.0
+        curl -sSL https://install.astronomer.io | sudo bash -s
       shell: bash
     - name: Deployment Preview action
       run: |
