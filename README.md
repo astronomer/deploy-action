@@ -98,7 +98,7 @@ steps:
   uses: astronomer/deploy-action@v0.1
   with:
     deployment-id: <deployment id>
-    dag-folder: /example-dags/dags/
+    root-folder: /example-dags/dags/
 ```
 
 ### Run Pytests
