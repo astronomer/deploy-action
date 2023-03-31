@@ -4,10 +4,6 @@ branding:
     icon: 'upload-cloud'
     color: 'purple'
 inputs:
-  dag-deploy-enabled:
-    required: false
-    default: false
-    description: "If true only DAGs will be deployed when dag files are pushed."
   root-folder:
     required: false
     default: ./
@@ -30,7 +26,28 @@ inputs:
   image-name:
     required: false
     default: no-custom-image
-    description: Specify a custom built image to deploy to an Asto Deployment.
+    description: "Specify a custom built image to deploy to an Asto Deployment."
+  action:
+    required: false
+    default: deploy
+    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't sepcify anything if you are deploying to a regular deployment."
+  deployment-name:
+    required: false
+    default: false
+    description: "The name of the deployment you want to make preview from or are deploying too."
+  deployment-id:
+    required: false
+    default: false
+    description: "The id of the deployment you to make a preview from or are deploying too."
+  workspace:
+    required: false
+    default: false
+    description: "If you are using an organization token you will need to provide a workspace-name or id."
+  preview-name:
+    required: false
+    default: false
+    description: "Custom preview name. By default this is branch name “_” deployment name"
+
 runs:
   using: "composite"
   steps:
@@ -38,7 +55,167 @@ runs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 2
-    # Determine if only DAGs have changes 
+    # Determine if only DAGs have changes
+    - name: Install Astro
+      run: |
+        curl -sSL https://install.astronomer.io | sudo bash -s
+      shell: bash
+    - name: Deployment Preview action
+      run: |
+
+        # set action
+        ACTION=nothing
+
+        # switch workspace if specified
+        if [[ ${{ inputs.workspace }} != false ]]; then
+          astro workspace switch ${{ inputs.workspace }}
+        fi
+        # error if both deployment name and id are you used
+        if [[ "${{ inputs.deployment-name }}" != false && ${{ inputs.deployment-id }} != false ]]; then
+          echo ERROR: cannot specify both a Deployment ID and Name
+          exit 1 # terminate and indicate error
+        fi
+        # figure out deployment id
+        if [[ "${{ inputs.deployment-name }}" != false ]]; then
+          # get deployment-id
+          DEPLOYMENT_ID="$(astro deployment inspect --clean-output -n "${{ inputs.deployment-name }}" --key metadata.deployment_id)"
+        fi
+
+        if [[ ${{ inputs.deployment-id }} != false ]]; then
+          DEPLOYMENT_ID=${{ inputs.deployment-id }}
+        fi 
+
+        # create deployment preview if action is create-deployment-preview
+        if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
+
+          if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
+            echo ERROR: cannot create a deployment preview without specifying a deployment name or id
+            exit 1 # terminate and indicate error
+          fi
+
+          if [[ ${{ inputs.preview-name }} != false ]]; then
+            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
+
+          else 
+            # get branch name
+            branch_ref="${{ github.ref }}"
+            branch_name="${branch_ref##*/}"
+            DEPLOYMENT_NAME="$(./astro deployment inspect --clean-output $DEPLOYMENT_ID --key configuration.name)"
+            BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
+            BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
+            echo $BRANCH_DEPLOYMENT_NAME
+          fi
+
+          # Create template of deployment to be copied with
+          ./astro deployment inspect --clean-output $DEPLOYMENT_ID --template > deployment-preview-template.yaml # autmatically creates deployment-preview-template.yaml file
+
+          # Add name to deployment template file
+          sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
+          
+          # Create new deploymeent preview based on the deployment template file
+          ./astro deployment create --clean-output --deployment-file deployment-preview-template.yaml
+
+          # Get deployment ID
+          echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
+
+          # don't skip deploy
+          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
+
+          # image deploy only
+          echo "IMAGE_DEPLOY_ONLY=true" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=create
+        fi
+
+        # delete deployment preview and skip deploy if action is delete-deployment-preview
+        if [[ ${{ inputs.action }} == delete-deployment-preview ]]; then
+
+          if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
+            echo ERROR: cannot delete a deployment preview without specifying a deployment name or id
+            exit 1 # terminate and indicate error
+          fi
+
+          if [[ ${{ inputs.preview-name }} != false ]]; then
+            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
+
+          else 
+            DEPLOYMENT_NAME="$(./astro deployment inspect --clean-output $DEPLOYMENT_ID --key configuration.name)"
+            BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
+            BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
+          fi
+          # delete branch deployment
+          ./astro deployment delete -n $BRANCH_DEPLOYMENT_NAME -f
+
+          # skip deploy
+          echo "SKIP_DEPLOY=true" >> $GITHUB_OUTPUT
+
+          # not image deploy only
+          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=delete
+        fi
+        
+        # # deploy to deployment preview if action is cdeploy-deployment-preview
+        if [[ ${{ inputs.action }} == deploy-deployment-preview ]]; then
+
+          if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
+            echo ERROR: cannot deploy to a deployment preview without specifying a deployment name or id
+            exit 1 # terminate and indicate error
+          fi
+
+          if [[ ${{ inputs.preview-name }} != false ]]; then
+            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
+
+          else 
+            DEPLOYMENT_NAME="$(./astro deployment inspect --clean-output $DEPLOYMENT_ID --key configuration.name)"
+            BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
+            BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
+          fi
+
+          # Get deployment ID
+          echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
+
+          # don't skip deploy
+          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
+          
+          # not image deploy only
+          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=deploy-preview
+        fi
+
+        # if action is deploy set final deployment id to deployment id
+        if [[ ${{ inputs.action }} == deploy ]]; then
+          echo "FINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+          # don't skip deploy
+          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
+
+          # not image deploy only
+          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=deploy
+        fi
+
+        if [[ $ACTION == nothing ]]; then
+          echo ERROR: you specfied an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
+          exit 1 # terminate and indicate error
+        fi
+      shell: bash
+      id: deployment-preview
+    - name: Determine if DAG Deploy is enabled
+      run: |
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false && ${{steps.deployment-preview.outputs.IMAGE_DEPLOY_ONLY}} == false ]]; then
+          echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect --clean-output ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
+        else
+          echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
+      id: dag-deploy-enabled
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
@@ -53,8 +230,13 @@ runs:
           fi
         done
 
-        if [[ ${{ inputs.dag-deploy-enabled }} == false ]]; then
+        if [[ ${{steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED}} == false ]]; then
           dags_only=0
+        fi
+
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == true ]]; then
+          # skip all deploy steps 
+          dags_only=2
         fi
 
         echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
@@ -92,15 +274,13 @@ runs:
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
         cd ${{ inputs.root-folder }}
-        curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
         cd ${{ inputs.root-folder }}
-        curl -sSL https://install.astronomer.io | sudo bash -s
-        astro deploy ${{steps.deploy-options.outputs.OPTIONS}}
+        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
   
