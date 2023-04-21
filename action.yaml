@@ -100,20 +100,20 @@ runs:
             # get branch name
             branch_ref="${{ github.ref }}"
             branch_name="${branch_ref##*/}"
-            DEPLOYMENT_NAME="$(./astro deployment inspect --clean-output $DEPLOYMENT_ID --key configuration.name)"
+            DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
             echo $BRANCH_DEPLOYMENT_NAME
           fi
 
           # Create template of deployment to be copied with
-          ./astro deployment inspect --clean-output $DEPLOYMENT_ID --template > deployment-preview-template.yaml # autmatically creates deployment-preview-template.yaml file
+          astro deployment inspect $DEPLOYMENT_ID --clean-output --template > deployment-preview-template.yaml # autmatically creates deployment-preview-template.yaml file
 
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
           
           # Create new deploymeent preview based on the deployment template file
-          ./astro deployment create --clean-output --deployment-file deployment-preview-template.yaml
+          astro deployment create --clean-output --deployment-file deployment-preview-template.yaml
 
           # Get deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
@@ -140,12 +140,12 @@ runs:
             BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
 
           else 
-            DEPLOYMENT_NAME="$(./astro deployment inspect --clean-output $DEPLOYMENT_ID --key configuration.name)"
+            DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
           fi
           # delete branch deployment
-          ./astro deployment delete -n $BRANCH_DEPLOYMENT_NAME -f
+          astro deployment delete -n $BRANCH_DEPLOYMENT_NAME -f
 
           # skip deploy
           echo "SKIP_DEPLOY=true" >> $GITHUB_OUTPUT
@@ -169,7 +169,7 @@ runs:
             BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
 
           else 
-            DEPLOYMENT_NAME="$(./astro deployment inspect --clean-output $DEPLOYMENT_ID --key configuration.name)"
+            DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
           fi
@@ -210,7 +210,7 @@ runs:
     - name: Determine if DAG Deploy is enabled
       run: |
         if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false && ${{steps.deployment-preview.outputs.IMAGE_DEPLOY_ONLY}} == false ]]; then
-          echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect --clean-output ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
+          echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
         else
           echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
         fi
