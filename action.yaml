@@ -113,7 +113,7 @@ runs:
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
           
           # Create new deploymeent preview based on the deployment template file
-          astro deployment create --clean-output --deployment-file deployment-preview-template.yaml
+          astro deployment create --deployment-file deployment-preview-template.yaml
 
           # Get deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
