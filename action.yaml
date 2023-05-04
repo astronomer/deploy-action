@@ -104,7 +104,9 @@ runs:
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
               BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
             else
-              BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
+              branch_ref="${{ github.ref }}"
+              branch_name="${branch_ref##*/}"
+              BRANCH_DEPLOYMENT_NAME=$branch_name_$DEPLOYMENT_NAME
             fi
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
             echo $BRANCH_DEPLOYMENT_NAME
@@ -148,7 +150,9 @@ runs:
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
               BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
             else
-              BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
+              branch_ref="${{ github.ref }}"
+              branch_name="${branch_ref##*/}"
+              BRANCH_DEPLOYMENT_NAME=$branch_name_$DEPLOYMENT_NAME
             fi
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
           fi
@@ -181,7 +185,10 @@ runs:
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
               BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
             else
-              BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
+              # BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
+              branch_ref="${{ github.ref }}"
+              branch_name="${branch_ref##*/}"
+              BRANCH_DEPLOYMENT_NAME=$branch_name_$DEPLOYMENT_NAME
             fi
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
           fi
