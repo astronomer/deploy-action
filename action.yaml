@@ -98,10 +98,14 @@ runs:
 
           else 
             # get branch name
-            branch_ref="${{ github.ref }}"
-            branch_name="${branch_ref##*/}"
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
-            BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
+            if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
+              BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
+            else
+              branch_ref="${{ github.ref }}"
+              branch_name="${branch_ref##*/}"
+              BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
+            fi
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
             echo $BRANCH_DEPLOYMENT_NAME
           fi
@@ -167,10 +171,16 @@ runs:
 
           if [[ ${{ inputs.preview-name }} != false ]]; then
             BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
-
           else 
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
-            BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
+            if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
+              BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
+            else
+              # BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
+              branch_ref="${{ github.ref }}"
+              branch_name="${branch_ref##*/}"
+              BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
+            fi
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
           fi
 
