@@ -83,10 +83,11 @@ runs:
 
         if [[ ${{ inputs.deployment-id }} != false ]]; then
           DEPLOYMENT_ID=${{ inputs.deployment-id }}
-        fi 
-
+        fi
         # create deployment preview if action is create-deployment-preview
         if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
+
+
 
           if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
             echo ERROR: cannot create a deployment preview without specifying a deployment name or id
@@ -119,8 +120,11 @@ runs:
           # Create new deploymeent preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
 
-          # Get deployment ID
+          # Get final deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
+
+          # Get original deployment ID
+          echo "ORIGINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
 
           # don't skip deploy
           echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
@@ -292,5 +296,18 @@ runs:
       run: |
         cd ${{ inputs.root-folder }}
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
+      shell: bash
+    - name: Copy Airflow Connections, Variables, and Pools
+      if: inputs.action == create-deployment-preview
+      run: |
+        if [[ ${{ inputs.connections }} == true ]]; then
+          astro deployment connections copy --source-id ${{steps.deployment-preview.outputs.ORIGINAL_DEPLOYMENT_ID}}  --target-id ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}}
+        fi
+        if [[ ${{ inputs.airflow-variables }} == true ]]; then
+          astro deployment airflow-variables copy --source-id ${{steps.deployment-preview.outputs.ORIGINAL_DEPLOYMENT_ID}} --target-id ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}}
+        fi
+        if [[ ${{ inputs.pools }} == true ]]; then
+          astro deployment pools copy --source-id ${{steps.deployment-preview.outputs.ORIGINAL_DEPLOYMENT_ID}} --target-id ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}}
+        fi
       shell: bash
   
