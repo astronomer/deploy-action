@@ -177,7 +177,7 @@ jobs:
 This section contains four workflow files that you will need in your repository to have a full Deployment Preview Cycle running for your Deployment. A Deployment Preview is an Astro Deployment that mirrors the configuration of your original Deployment. This Deployment Preview can be used to test your new pipelines changes before pushing them to your orginal Deployment. The scripts below will take your pipeline changes through the following flow:
 
 1. When a new branch is created a Deployment Preview will be created based off your orginal Deployment
-2. When a PR is created from a branch code changes will be deployed to the Deployment Preivew
+2. When a PR is created from a branch code changes will be deployed to the Deployment Preview
 3. When a PR is merged into your "main" branch code changes will be deployed to the orginal Deployment
 4. When a branch is deleted the the corresponding Deployment Preview will also be deleted
 
