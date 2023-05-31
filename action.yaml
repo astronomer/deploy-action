@@ -310,7 +310,7 @@ runs:
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
-      if: ${{ inputs.action }} == create-deployment-preview
+      if: inputs.action == create-deployment-preview
       run: |
         if [[ ${{ inputs.copy-connections }} == true ]]; then
           astro deployment connection copy --source-id ${{steps.deployment-preview.outputs.ORIGINAL_DEPLOYMENT_ID}}  --target-id ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}}
