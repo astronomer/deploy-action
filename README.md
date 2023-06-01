@@ -177,11 +177,11 @@ jobs:
 This section contains four workflow files that you will need in your repository to have a full Deployment Preview Cycle running for your Deployment. A Deployment Preview is an Astro Deployment that mirrors the configuration of your original Deployment. This Deployment Preview can be used to test your new pipelines changes before pushing them to your orginal Deployment. The scripts below will take your pipeline changes through the following flow:
 
 1. When a new branch is created a Deployment Preview will be created based off your orginal Deployment
-2. When a PR is created from a branch code changes will be deployed to the Deployment Preivew
+2. When a PR is created from a branch code changes will be deployed to the Deployment Preview
 3. When a PR is merged into your "main" branch code changes will be deployed to the orginal Deployment
 4. When a branch is deleted the the corresponding Deployment Preview will also be deleted
 
-## Create Deployment Preivew
+## Create Deployment Preview
 
 ```
 name: Astronomer CI - Create deployment preview
@@ -199,7 +199,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - name: Create Deployment Preivew
+    - name: Create Deployment Preview
       uses: astronomer/deploy-action@v0.2
       with:
         action: create-deployment-preview
@@ -224,7 +224,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - name: Deploy to Deployment Preivew
+    - name: Deploy to Deployment Preview
       uses: astronomer/deploy-action@v0.2
       with:
         action: deploy-deployment-preview
@@ -249,7 +249,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - name: Create Deployment Preivew
+    - name: Create Deployment Preview
       uses: astronomer/deploy-action@v0.2
       with:
         action: delete-deployment-preview
@@ -277,29 +277,5 @@ jobs:
     - name: Deploy to Astro
       uses: astronomer/deploy-action@v0.2
       with:
-        deployment-id: <orginal deployment id>
-```
-## Delete Deployment Preview
-
-```
-name: Astronomer CI - Delete Deployment Preview
-
-on:
-  delete:
-    branches:
-    - "**"
-
-env:
-  ## Sets Deployment API key credentials as environment variables
-  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Create Deployment Preivew
-      uses: astronomer/deploy-action@v0.2
-      with:
-        action: delete-deployment-preview
         deployment-id: <orginal deployment id>
 ```
