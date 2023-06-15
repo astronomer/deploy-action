@@ -59,6 +59,10 @@ inputs:
     required: false
     default: true
     descrioption: "Copy pools from the original deployment to the new deployment preivew."
+outputs:
+  preview-id:
+    description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
+    value: ${{ steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID }}
 
 runs:
   using: "composite"
