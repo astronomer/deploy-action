@@ -76,6 +76,7 @@ runs:
     - name: Install Astro
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s
+        pip3 install yq
       shell: bash
     - name: Deployment Preview action
       run: |
