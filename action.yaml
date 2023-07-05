@@ -133,8 +133,13 @@ runs:
 
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
-          
-          # Create new deploymeent preview based on the deployment template file
+
+          # Remove worker_queues resource requests if deployment uses Kubernetes Executor
+          if [[ $(yq -r .deployment.configuration.executor deployment-preview-template.yaml) == "KubernetesExecutor" ]] then
+            cat deployment-preview-template.yaml |  yq -y 'del(.deployment.worker_queues[] | .pod_cpu, .pod_ram)' | tee deployment-preview-template.yaml
+          fi
+
+          # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
 
           # Get final deployment ID
