@@ -32,7 +32,7 @@ Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/
 
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
-1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.1`.
+1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.3`.
 2. Configure the workflow to fit your team's use case. This could include creating a deployment preview or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
 3. Make changes to your Astro project files in GitHub and let this GitHub Actions workflow take care of deploying your code to Astro.
 
