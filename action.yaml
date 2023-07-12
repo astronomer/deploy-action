@@ -7,7 +7,7 @@ inputs:
   root-folder:
     required: false
     default: ./
-    description: "Path to to Astro project folder that contains that 'dags' folder"
+    description: "Path to the Astro project folder that contains the 'dags' folder"
   parse:
     required: false
     default: false
@@ -15,14 +15,14 @@ inputs:
   pytest:
     required: false
     default: false
-    description: "if true custom Pytests will be ran before deploying to Astro."
+    description: "if true custom pytests will be ran before deploying to Astro."
   pytest-file:
     required: false
-    description: "Specify custom Pytest files to run with the pytest command."
+    description: "Specify custom pytest files to run with the pytest command."
   force:
     required: false
     default: false
-    description: "If true your code will be force deployed to Astornomer. Mostly uesd to skip parse test on image deploys."
+    description: "If true your code will be force deployed to Astronomer. Mostly uesd to skip parse test on image deploys."
   image-name:
     required: false
     default: no-custom-image
@@ -34,7 +34,7 @@ inputs:
   deployment-name:
     required: false
     default: false
-    description: "The name of the deployment you want to make preview from or are deploying too."
+    description: "The name of the deployment you want to make preview from or are deploying to."
   deployment-id:
     required: false
     default: false
@@ -42,7 +42,7 @@ inputs:
   workspace:
     required: false
     default: false
-    description: "If you are using an organization token you will need to provide a workspace-name or id."
+    description: "If you are using an organization token you will need to provide a workspace name or id."
   preview-name:
     required: false
     default: false
@@ -54,11 +54,11 @@ inputs:
   copy-airflow-variables:
     required: false
     default: true
-    descrioption: "Copy Airflow variables from the original deployment to the new deployment preivew."
+    description: "Copy Airflow variables from the original deployment to the new deployment preivew."
   copy-pools:
     required: false
     default: true
-    descrioption: "Copy pools from the original deployment to the new deployment preivew."
+    description: "Copy pools from the original deployment to the new deployment preivew."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -87,7 +87,7 @@ runs:
         if [[ ${{ inputs.workspace }} != false ]]; then
           astro workspace switch ${{ inputs.workspace }}
         fi
-        # error if both deployment name and id are you used
+        # error if both deployment name and id are used
         if [[ "${{ inputs.deployment-name }}" != false && ${{ inputs.deployment-id }} != false ]]; then
           echo ERROR: cannot specify both a Deployment ID and Name
           exit 1 # terminate and indicate error
@@ -129,12 +129,12 @@ runs:
           fi
 
           # Create template of deployment to be copied with
-          astro deployment inspect $DEPLOYMENT_ID --clean-output --template > deployment-preview-template.yaml # autmatically creates deployment-preview-template.yaml file
+          astro deployment inspect $DEPLOYMENT_ID --clean-output --template > deployment-preview-template.yaml # automatically creates deployment-preview-template.yaml file
 
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
           
-          # Create new deploymeent preview based on the deployment template file
+          # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
 
           # Get final deployment ID
@@ -233,7 +233,7 @@ runs:
         fi
 
         if [[ $ACTION == nothing ]]; then
-          echo ERROR: you specfied an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
+          echo ERROR: you specified an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
           exit 1 # terminate and indicate error
         fi
       shell: bash
@@ -255,7 +255,7 @@ runs:
 
         for file in $files; do
           if [[ $file != *"dags/"* ]]; then
-            echo $file is not a dag, triggering a full image build
+            echo $file is not a DAG, triggering a full image build
             dags_only=0
             break
           fi
