@@ -22,7 +22,7 @@ inputs:
   force:
     required: false
     default: false
-    description: "If true your code will be force deployedto Astornomer. Mostly uesd to skip parse test on image deploys."
+    description: "If true your code will be force deployed to Astornomer. Mostly uesd to skip parse test on image deploys."
   image-name:
     required: false
     default: no-custom-image
