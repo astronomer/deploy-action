@@ -22,7 +22,7 @@ inputs:
   force:
     required: false
     default: false
-    description: "If true your code will be force deployed to Astronomer. Mostly uesd to skip parse test on image deploys."
+    description: "If true your code will be force deployed to Astronomer. Mostly used to skip parse test on image deploys."
   image-name:
     required: false
     default: no-custom-image
@@ -30,15 +30,15 @@ inputs:
   action:
     required: false
     default: deploy
-    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't sepcify anything if you are deploying to a regular deployment."
+    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't sepcify anything if you are deploying to a regular Deployment."
   deployment-name:
     required: false
     default: false
-    description: "The name of the deployment you want to make preview from or are deploying to."
+    description: "The name of the Deployment you want to make preview from or are deploying to."
   deployment-id:
     required: false
     default: false
-    description: "The id of the deployment you to make a preview from or are deploying too."
+    description: "The id of the Deployment you to make a preview from or are deploying to."
   workspace:
     required: false
     default: false
@@ -46,19 +46,19 @@ inputs:
   preview-name:
     required: false
     default: false
-    description: "Custom preview name. By default this is branch name “_” deployment name."
+    description: "Custom preview name. By default this is <branch-name>_<deployment-name>."
   copy-connections:
     required: false
     default: true
-    description: "Copy connections from the original deployment to the new deployment preview."
+    description: "Copy connections from the original Deployment to the new deployment preview."
   copy-airflow-variables:
     required: false
     default: true
-    description: "Copy Airflow variables from the original deployment to the new deployment preivew."
+    description: "Copy Airflow variables from the original Deployment to the new deployment preview."
   copy-pools:
     required: false
     default: true
-    description: "Copy pools from the original deployment to the new deployment preivew."
+    description: "Copy pools from the original Deployment to the new deployment preview."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -137,10 +137,10 @@ runs:
           # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
 
-          # Get final deployment ID
+          # Get final Deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
 
-          # Get original deployment ID
+          # Get original Deployment ID
           echo "ORIGINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
 
           # don't skip deploy
@@ -182,7 +182,7 @@ runs:
           ACTION=delete
         fi
         
-        # # deploy to deployment preview if action is cdeploy-deployment-preview
+        # # deploy to deployment preview if action is deploy-deployment-preview
         if [[ ${{ inputs.action }} == deploy-deployment-preview ]]; then
 
           if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
@@ -205,7 +205,7 @@ runs:
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
           fi
 
-          # Get deployment ID
+          # Get Deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
 
           # don't skip deploy
@@ -218,7 +218,7 @@ runs:
           ACTION=deploy-preview
         fi
 
-        # if action is deploy set final deployment id to deployment id
+        # if action is deploy set final Deployment id to Deployment id
         if [[ ${{ inputs.action }} == deploy ]]; then
           echo "FINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
 
