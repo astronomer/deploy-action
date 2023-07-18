@@ -23,7 +23,7 @@ To use this GitHub action, you need:
 
 - An Astro project. See [Create a project](https://docs.astronomer.io/astro/create-project).
 - A Deployment on Astro. See [Create a Deployment](https://docs.astronomer.io/astro/create-deployment).
-- A Deployment API Token. See [API Tokens](https://docs.astronomer.io/astro/workspace-api-tokens)
+- A Workspace or Organization API Token. See [API Tokens](https://docs.astronomer.io/astro/workspace-api-tokens)
 - Or a Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
 
 Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRO_API_TOKEN` or Deployment API Keys. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples). 
