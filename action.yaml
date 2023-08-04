@@ -18,6 +18,7 @@ inputs:
     description: "if true custom pytests will be ran before deploying to Astro."
   pytest-file:
     required: false
+    default: tests/
     description: "Specify custom pytest files to run with the pytest command."
   force:
     required: false
