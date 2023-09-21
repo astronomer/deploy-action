@@ -60,6 +60,10 @@ inputs:
     required: false
     default: true
     description: "Copy pools from the original Deployment to the new deployment preview."
+  checkout:
+    required: false
+    default: true
+    description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action"
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -70,6 +74,7 @@ runs:
   steps:
     - name: checkout repo
       uses: actions/checkout@v3
+      if: inputs.checkout == true
       with:
         fetch-depth: 2
         clean: false
