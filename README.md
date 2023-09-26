@@ -56,6 +56,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `image-name` | | Specifies a custom, locally built image to deploy |
 | `workspace` | `false` | If you are using an organization token you will need to provide a workspace-name or id |
 | `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name |
+| `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action |
 
 
 ## Workflow file examples
