@@ -34,11 +34,9 @@ inputs:
     description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't sepcify anything if you are deploying to a regular Deployment."
   deployment-name:
     required: false
-    default: false
     description: "The name of the Deployment you want to make preview from or are deploying to."
   deployment-id:
     required: false
-    default: false
     description: "The id of the Deployment you to make a preview from or are deploying to."
   workspace:
     required: false
@@ -46,7 +44,6 @@ inputs:
     description: "If you are using an organization token you will need to provide a workspace name or id."
   preview-name:
     required: false
-    default: false
     description: "Custom preview name. By default this is <branch-name>_<deployment-name>."
   copy-connections:
     required: false
@@ -94,32 +91,31 @@ runs:
           astro workspace switch ${{ inputs.workspace }}
         fi
         # error if both deployment name and id are used
-        if [[ "${{ inputs.deployment-name }}" != false && "${{ inputs.deployment-id }}" != false ]]; then
+        if [[ "${{ inputs.deployment-name }}" != "" && "${{ inputs.deployment-id }}" != "" ]]; then
           echo ERROR: cannot specify both a Deployment ID and Name
           exit 1 # terminate and indicate error
         fi
         # figure out deployment id
-        if [[ "${{ inputs.deployment-name }}" != false ]]; then
+        if [[ "${{ inputs.deployment-name }}" != "" ]]; then
           # get deployment-id
           DEPLOYMENT_ID="$(astro deployment inspect --clean-output -n "${{ inputs.deployment-name }}" --key metadata.deployment_id)"
         fi
 
-        if [[ "${{ inputs.deployment-id }}" != false ]]; then
-          DEPLOYMENT_ID=${{ inputs.deployment-id }}
+        if [[ "${{ inputs.deployment-id }}" != "" ]]; then
+          DEPLOYMENT_ID="${{ inputs.deployment-id }}"
         fi
         # create deployment preview if action is create-deployment-preview
         if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
 
 
 
-          if [[ "${{ inputs.deployment-name }}" == false && "${{ inputs.deployment-id }}" == false ]]; then
+          if [[ "${{ inputs.deployment-name }}" == "" && "${{ inputs.deployment-id }}" == "" ]]; then
             echo ERROR: cannot create a deployment preview without specifying a deployment name or id
             exit 1 # terminate and indicate error
           fi
 
-          if [[ ${{ inputs.preview-name }} != false ]]; then
-            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
-
+          if [[ "${{ inputs.preview-name }}" != "" ]]; then
+            BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
           else 
             # get branch name
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
@@ -162,13 +158,13 @@ runs:
         # delete deployment preview and skip deploy if action is delete-deployment-preview
         if [[ ${{ inputs.action }} == delete-deployment-preview ]]; then
 
-          if [[ "${{ inputs.deployment-name }}" == false && "${{ inputs.deployment-id }}" == false ]]; then
+          if [[ "${{ inputs.deployment-name }}" == "" && "${{ inputs.deployment-id }}" == "" ]]; then
             echo ERROR: cannot delete a deployment preview without specifying a deployment name or id
             exit 1 # terminate and indicate error
           fi
 
-          if [[ ${{ inputs.preview-name }} != false ]]; then
-            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
+          if [[ "${{ inputs.preview-name }}" != "" ]]; then
+            BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
 
           else 
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
@@ -191,13 +187,13 @@ runs:
         # # deploy to deployment preview if action is deploy-deployment-preview
         if [[ ${{ inputs.action }} == deploy-deployment-preview ]]; then
 
-          if [[ "${{ inputs.deployment-name }}" == false && "${{ inputs.deployment-id }}" == false ]]; then
+          if [[ "${{ inputs.deployment-name }}" == "" && "${{ inputs.deployment-id }}" == "" ]]; then
             echo ERROR: cannot deploy to a deployment preview without specifying a deployment name or id
             exit 1 # terminate and indicate error
           fi
 
-          if [[ ${{ inputs.preview-name }} != false ]]; then
-            BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
+          if [[ "${{ inputs.preview-name }}" != "" ]]; then
+            BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
           else 
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
