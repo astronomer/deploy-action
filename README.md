@@ -64,7 +64,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 
 In the following example, the GitHub action deploys code to Astro. This example assumes that you have one Astro Deployment and one branch. When a change is merged to the `main` branch, your Astro project is deployed to Astro. DAG files are parsed on every deploy and no pytests are ran.
 
-```
+```yaml
 name: Astronomer CI - Deploy code
 
 on:
@@ -93,7 +93,7 @@ Use the following topics to further configure the action based on your needs.
 
 In the following example, the folder `/example-dags/dags` is specified as the DAG folder.
 
-```
+```yaml
 steps:
 - name: Deploy to Astro
   uses: astronomer/deploy-action@v0.2
@@ -106,7 +106,7 @@ steps:
 
 In the following example, the pytest located at `/tests/test-tags.py` runs before deploying to Astro.
 
-```
+```yaml
 steps:
 - name: Deploy to Astro
   uses: astronomer/deploy-action@v0.2
@@ -120,7 +120,7 @@ steps:
 
 In the following example, `force` is enabled and both the DAG parse and pytest processes are skipped.
 
-```
+```yaml
 steps:
 - name: Deploy to Astro
   uses: astronomer/deploy-action@v0.2
@@ -133,7 +133,7 @@ steps:
 
 In the following example, a custom Docker image is built and deployed to an Astro Deployment.
 
-```
+```yaml
 name: Astronomer CI - Additional build-time args
 
 on:
@@ -184,7 +184,7 @@ This section contains four workflow files that you will need in your repository 
 
 ## Create Deployment Preview
 
-```
+```yaml
 name: Astronomer CI - Create deployment preview
 
 on:
@@ -209,7 +209,7 @@ jobs:
 
 ## Deploy to Deployment Preview
 
-```
+```yaml
 name: Astronomer CI - Deploy code to Preview
 
 on:
@@ -234,7 +234,7 @@ jobs:
 
 ## Delete Deployment Preview
 
-```
+```yaml
 name: Astronomer CI - Delete Deployment Preview
 
 on:
@@ -259,7 +259,7 @@ jobs:
 
 ## Deploy to Orginal Deployment
 
-```
+```yaml
 name: Astronomer CI - Deploy code to Astro
 
 on:
