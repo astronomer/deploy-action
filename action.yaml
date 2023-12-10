@@ -94,7 +94,7 @@ runs:
           astro workspace switch ${{ inputs.workspace }}
         fi
         # error if both deployment name and id are used
-        if [[ "${{ inputs.deployment-name }}" != false && ${{ inputs.deployment-id }} != false ]]; then
+        if [[ "${{ inputs.deployment-name }}" != false && "${{ inputs.deployment-id }}" != false ]]; then
           echo ERROR: cannot specify both a Deployment ID and Name
           exit 1 # terminate and indicate error
         fi
@@ -104,7 +104,7 @@ runs:
           DEPLOYMENT_ID="$(astro deployment inspect --clean-output -n "${{ inputs.deployment-name }}" --key metadata.deployment_id)"
         fi
 
-        if [[ ${{ inputs.deployment-id }} != false ]]; then
+        if [[ "${{ inputs.deployment-id }}" != false ]]; then
           DEPLOYMENT_ID=${{ inputs.deployment-id }}
         fi
         # create deployment preview if action is create-deployment-preview
@@ -112,7 +112,7 @@ runs:
 
 
 
-          if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
+          if [[ "${{ inputs.deployment-name }}" == false && "${{ inputs.deployment-id }}" == false ]]; then
             echo ERROR: cannot create a deployment preview without specifying a deployment name or id
             exit 1 # terminate and indicate error
           fi
@@ -162,7 +162,7 @@ runs:
         # delete deployment preview and skip deploy if action is delete-deployment-preview
         if [[ ${{ inputs.action }} == delete-deployment-preview ]]; then
 
-          if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
+          if [[ "${{ inputs.deployment-name }}" == false && "${{ inputs.deployment-id }}" == false ]]; then
             echo ERROR: cannot delete a deployment preview without specifying a deployment name or id
             exit 1 # terminate and indicate error
           fi
@@ -191,7 +191,7 @@ runs:
         # # deploy to deployment preview if action is deploy-deployment-preview
         if [[ ${{ inputs.action }} == deploy-deployment-preview ]]; then
 
-          if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
+          if [[ "${{ inputs.deployment-name }}" == false && "${{ inputs.deployment-id }}" == false ]]; then
             echo ERROR: cannot deploy to a deployment preview without specifying a deployment name or id
             exit 1 # terminate and indicate error
           fi
