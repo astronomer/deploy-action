@@ -63,7 +63,7 @@ inputs:
   cli-version:
     required: false
     default: ""
-    descriptions: "The desired Astro CLI version to use"
+    description: "The desired Astro CLI version to use"
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
