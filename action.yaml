@@ -60,10 +60,15 @@ inputs:
     required: false
     default: true
     description: "Copy pools from the original Deployment to the new deployment preview."
+  cli-version:
+    required: false
+    default: ""
+    description: "The desired Astro CLI version to use"
   checkout:
     required: false
     default: true
     description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action."
+
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -81,7 +86,7 @@ runs:
     # Determine if only DAGs have changes
     - name: Install Astro
       run: |
-        curl -sSL https://install.astronomer.io | sudo bash -s
+        curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }} 
       shell: bash
     - name: Deployment Preview action
       run: |
