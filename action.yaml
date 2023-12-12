@@ -1,5 +1,6 @@
 name: "Deploy Apache Airflow DAGs to Astro"
 description: "Test your DAGs and deploy your Astro project to a Deployment on Astro, Astronomer's managed Airflow service."
+author: "Astronomer"
 branding:
     icon: 'upload-cloud'
     color: 'purple'
