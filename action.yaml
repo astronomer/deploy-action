@@ -1,13 +1,14 @@
 name: "Deploy Apache Airflow DAGs to Astro"
 description: "Test your DAGs and deploy your Astro project to a Deployment on Astro, Astronomer's managed Airflow service."
+author: "Astronomer"
 branding:
-    icon: 'upload-cloud'
-    color: 'purple'
+  icon: 'upload-cloud'
+  color: 'purple'
 inputs:
   root-folder:
     required: false
     default: ./
-    description: "Path to the Astro project folder that contains the 'dags' folder"
+    description: "Path to the Astro project folder that contains the 'dags' folder."
   parse:
     required: false
     default: false
@@ -31,7 +32,7 @@ inputs:
   action:
     required: false
     default: deploy
-    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't sepcify anything if you are deploying to a regular Deployment."
+    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't specify anything if you are deploying to a regular Deployment."
   deployment-name:
     required: false
     default: false
@@ -59,10 +60,15 @@ inputs:
     required: false
     default: true
     description: "Copy pools from the original Deployment to the new deployment preview."
+  cli-version:
+    required: false
+    default: ""
+    description: "The desired Astro CLI version to use"
   checkout:
     required: false
     default: true
-    description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action"
+    description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action."
+
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -80,7 +86,7 @@ runs:
     # Determine if only DAGs have changes
     - name: Install Astro
       run: |
-        curl -sSL https://install.astronomer.io | sudo bash -s
+        curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }} 
       shell: bash
     - name: Deployment Preview action
       run: |
@@ -109,8 +115,6 @@ runs:
         # create deployment preview if action is create-deployment-preview
         if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
 
-
-
           if [[ "${{ inputs.deployment-name }}" == false && ${{ inputs.deployment-id }} == false ]]; then
             echo ERROR: cannot create a deployment preview without specifying a deployment name or id
             exit 1 # terminate and indicate error
@@ -119,7 +123,7 @@ runs:
           if [[ ${{ inputs.preview-name }} != false ]]; then
             BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
 
-          else 
+          else
             # get branch name
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
@@ -138,7 +142,7 @@ runs:
 
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
-          
+
           # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
 
@@ -169,7 +173,7 @@ runs:
           if [[ ${{ inputs.preview-name }} != false ]]; then
             BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
 
-          else 
+          else
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             BRANCH_DEPLOYMENT_NAME=${{ github.event.ref }}_$DEPLOYMENT_NAME
             BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
@@ -186,7 +190,7 @@ runs:
           # set action
           ACTION=delete
         fi
-        
+
         # # deploy to deployment preview if action is deploy-deployment-preview
         if [[ ${{ inputs.action }} == deploy-deployment-preview ]]; then
 
@@ -197,7 +201,7 @@ runs:
 
           if [[ ${{ inputs.preview-name }} != false ]]; then
             BRANCH_DEPLOYMENT_NAME=${{ inputs.preview-name }}
-          else 
+          else
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
               BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
@@ -215,7 +219,7 @@ runs:
 
           # don't skip deploy
           echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
-          
+
           # not image deploy only
           echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
 
@@ -271,7 +275,7 @@ runs:
         fi
 
         if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == true ]]; then
-          # skip all deploy steps 
+          # skip all deploy steps
           dags_only=2
         fi
 
@@ -297,7 +301,7 @@ runs:
         if [[ ${{ inputs.image-name }} != no-custom-image ]]; then
           options="$options --image-name ${{ inputs.image-name }}"
         fi
-        
+
         # add force option
         if [[ ${{ inputs.force }} == true ]]; then
           options="$options --force"
@@ -333,4 +337,3 @@ runs:
           fi
         fi
       shell: bash
-  

@@ -1,0 +1,11 @@
+---
+extends: default
+
+rules:
+  line-length: disable
+  document-start:
+    present: false
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false  # disabled because Bash scripts contain indented code
