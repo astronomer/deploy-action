@@ -92,7 +92,7 @@ runs:
     # Determine if only DAGs have changes
     - name: Install Astro
       run: |
-        curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }} 
+        curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }}
       shell: bash
     - name: Deployment Preview action
       run: |
@@ -128,7 +128,7 @@ runs:
 
           if [[ "${{ inputs.preview-name }}" != "" ]]; then
             BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
-          else 
+          else
             # get branch name
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
@@ -206,7 +206,7 @@ runs:
 
           if [[ "${{ inputs.preview-name }}" != "" ]]; then
             BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
-          else 
+          else
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
               BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
@@ -311,7 +311,7 @@ runs:
         if [[ ${{ inputs.force }} == true ]]; then
           options="$options --force"
         fi
-        
+
         # Add description option
         if [[ "${{ inputs.description }}" != '' ]]; then
           options='$options --description "${{ inputs.description }}"'
