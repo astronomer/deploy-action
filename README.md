@@ -45,9 +45,10 @@ The following table lists the configuration options for the Deploy to Astro acti
 
 | Name | Default | Description |
 | ---|---|--- |
-| `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. Don't specify anything if you are deploying to a regular deployment |
-| `deployment-id` | `false` | Specifies the id of the deployment you want to make a preview from or are deploying too |
-| `deployment-name` | `false` | Specifies the name of the deployment you want to make preview from or are deploying too. Cannot be used in combination with `deployment-id` |
+| `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. Don't sepcify anything if you are deploying to a regular deployment |
+| `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too |
+| `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
+| `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
 | `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/test-and-troubleshoot-locally#run-tests-with-pytest) |

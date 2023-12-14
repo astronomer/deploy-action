@@ -64,8 +64,17 @@ inputs:
   checkout:
     required: false
     default: true
-    description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action."
+    description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action"
+  description:
+    required: false
+    description: >
+      A description to set for deploying to Astro. This is equivalent to running `astro deploy --description "..."` with the Astro CLI.
+      The description is visible in the Deploy History tab in your Astro Deployment, and can be helpful to explain what triggered a deploy.
 
+      For example, to display the most recent commit that resulted in an Astro deploy, you could configure
+      `description: "Deployed from commit ..."` with the value of `github.event.after`.
+      This would display e.g. "Deployed from commit da39a3ee5e6b4b0d3255bfef95601890afd80709".
+      Reference: https://docs.github.com/en/webhooks/webhook-events-and-payloads#push.
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -83,7 +92,7 @@ runs:
     # Determine if only DAGs have changes
     - name: Install Astro
       run: |
-        curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }} 
+        curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }}
       shell: bash
     - name: Deployment Preview action
       run: |
@@ -119,7 +128,7 @@ runs:
 
           if [[ "${{ inputs.preview-name }}" != "" ]]; then
             BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
-          else 
+          else
             # get branch name
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
@@ -197,7 +206,7 @@ runs:
 
           if [[ "${{ inputs.preview-name }}" != "" ]]; then
             BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
-          else 
+          else
             DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
             if [[ ${GITHUB_HEAD_REF##*/} != "" ]]; then
               BRANCH_DEPLOYMENT_NAME=${GITHUB_HEAD_REF##*/}_$DEPLOYMENT_NAME
@@ -301,6 +310,11 @@ runs:
         # add force option
         if [[ ${{ inputs.force }} == true ]]; then
           options="$options --force"
+        fi
+
+        # Add description option
+        if [[ "${{ inputs.description }}" != '' ]]; then
+          options='$options --description "${{ inputs.description }}"'
         fi
 
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
