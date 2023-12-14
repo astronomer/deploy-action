@@ -43,8 +43,7 @@ inputs:
     description: "The id of the Deployment you to make a preview from or are deploying to."
   workspace:
     required: false
-    default: false
-    description: "If you are using an organization token you will need to provide a workspace name or id."
+    description: "Workspace id to select. Only required when `ASTRO_API_TOKEN` is given an organization token."
   preview-name:
     required: false
     default: false
@@ -95,8 +94,8 @@ runs:
         # set action
         ACTION=nothing
 
-        # switch workspace if specified
-        if [[ ${{ inputs.workspace }} != false ]]; then
+        # Select workspace if specified
+        if [[ "${{ inputs.workspace }}" != "" ]]; then
           astro workspace switch ${{ inputs.workspace }}
         fi
         # error if both deployment name and id are used

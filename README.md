@@ -54,8 +54,8 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`|
 | `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors |
 | `image-name` | | Specifies a custom, locally built image to deploy |
-| `workspace` | `false` | If you are using an organization token you will need to provide a workspace-name or id |
-| `preview-name` | `false` | Specifies custom preview name. By default this is branch name "_" deployment name |
+| `workspace` | | Workspace id to select. Only required when `ASTRO_API_TOKEN` is given an organization token. |
+| `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name |
 | `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action |
 
 
