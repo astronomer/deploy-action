@@ -1,5 +1,6 @@
 name: "Deploy Apache Airflow DAGs to Astro"
 description: "Test your DAGs and deploy your Astro project to a Deployment on Astro, Astronomer's managed Airflow service."
+author: "Astronomer"
 branding:
     icon: 'upload-cloud'
     color: 'purple'
@@ -7,7 +8,7 @@ inputs:
   root-folder:
     required: false
     default: ./
-    description: "Path to the Astro project folder that contains the 'dags' folder"
+    description: "Path to the Astro project folder that contains the 'dags' folder."
   parse:
     required: false
     default: false
@@ -31,7 +32,7 @@ inputs:
   action:
     required: false
     default: deploy
-    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't sepcify anything if you are deploying to a regular Deployment."
+    description: "Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either 'create-deployment-preview', 'delete-deployment-preview' or 'deploy-deployment-preview'. Don't specify anything if you are deploying to a regular Deployment."
   deployment-name:
     required: false
     default: false
@@ -60,10 +61,15 @@ inputs:
     required: false
     default: true
     description: "Copy pools from the original Deployment to the new deployment preview."
+  cli-version:
+    required: false
+    default: ""
+    description: "The desired Astro CLI version to use"
   checkout:
     required: false
     default: true
-    description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action"
+    description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action."
+
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -81,7 +87,7 @@ runs:
     # Determine if only DAGs have changes
     - name: Install Astro
       run: |
-        curl -sSL https://install.astronomer.io | sudo bash -s
+        curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }} 
       shell: bash
     - name: Deployment Preview action
       run: |
