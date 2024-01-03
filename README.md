@@ -13,7 +13,7 @@ This GitHub action runs as a step within a GitHub workflow file. When your CI/CD
 - Checks out your GitHub repository.
 - Optionally create or delete a Deployment Preview to test your code changes on before deploying to production.
 - Checks whether your commit only changed DAG code.
-- Optional. Tests DAG code with `pytest`. See [Run tests with pytest](https://docs.astronomer.io/astro/test-and-troubleshoot-locally#run-tests-with-pytest).
+- Optional. Tests DAG code with `pytest`. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest).
 - Runs `astro deploy --dags` if the commit only includes DAG code changes.
 - Runs `astro deploy` if the commit includes project configuration changes.
 
@@ -51,7 +51,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
 | `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro |
-| `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/test-and-troubleshoot-locally#run-tests-with-pytest) |
+| `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`|
 | `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors |
 | `image-name` | | Specifies a custom, locally built image to deploy |
