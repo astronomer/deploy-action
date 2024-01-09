@@ -314,7 +314,7 @@ runs:
 
         # Add description option
         if [[ "${{ inputs.description }}" != '' ]]; then
-          options="$options --description "${{ inputs.description }}""
+          options="$options --description '${{ inputs.description }}'"
         fi
 
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
