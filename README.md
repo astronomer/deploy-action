@@ -11,11 +11,12 @@ You can use and configure this GitHub action to easily deploy Apache Airflow DAG
 This GitHub action runs as a step within a GitHub workflow file. When your CI/CD pipeline is triggered, this action:
 
 - Checks out your GitHub repository.
-- Optionally create or delete a Deployment Preview to test your code changes on before deploying to production.
+- Optionally creates or deletes a Deployment Preview to test your code changes on before deploying to production.
 - Checks whether your commit only changed DAG code.
 - Optional. Tests DAG code with `pytest`. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest).
-- Runs `astro deploy --dags` if the commit only includes DAG code changes.
-- Runs `astro deploy` if the commit includes project configuration changes.
+- Either runs:
+  - `astro deploy --dags` if the commit only includes DAG code changes,
+  - or `astro deploy` (as well as `astro dev parse`) if the commit includes _any_ non-DAG-code-related changes.
 
 ## Prerequisites
 
@@ -26,17 +27,19 @@ To use this GitHub action, you need:
 - An Organization, Workspace, or Deployment API Token. See [API Tokens](https://docs.astronomer.io/astro/workspace-api-tokens)
 - Or (deprecated) a Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
 
-Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRO_API_TOKEN` or Deployment API Keys. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples). 
+> [!TIP]
+> Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRO_API_TOKEN` or Deployment API Keys. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples).
 
 ## Use this action
 
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
-1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.3`.
+1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.4`.
 2. Configure the workflow to fit your team's use case. This could include creating a deployment preview or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
 3. Make changes to your Astro project files in GitHub and let this GitHub Actions workflow take care of deploying your code to Astro.
 
-Astronomer recommends setting up multiple environments on Astro. See the [Multiple branch GitHub Actions workflow](https://docs.astronomer.io/astro/ci-cd?tab=multibranch#github-actions-image-only-deploys) in Astronomer documentation.
+> [!TIP]
+> Astronomer recommends setting up multiple environments on Astro. See the [Multiple branch GitHub Actions workflow](https://docs.astronomer.io/astro/ci-cd?tab=multibranch#github-actions-image-only-deploys) in Astronomer documentation.
 
 
 ## Configuration options
@@ -50,7 +53,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
 | `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder |
-| `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro |
+| `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro. Note that when an image deploy is performed (i.e. `astro deploy`), parsing is also executed by default. Parsing is _not_ performed automatically for DAG-only deploys (i.e. `astro deploy --dags`). |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`|
 | `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors |
@@ -171,7 +174,7 @@ jobs:
       with:
         deployment-id: <deployment id>
         image-name: ${{ steps.image_tag.outputs.image_tag }}
-      
+
 ```
 
 ## Deployment Preview Templates
