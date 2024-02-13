@@ -264,7 +264,7 @@ runs:
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
-        files=$(git diff --name-only HEAD^..HEAD)
+        files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep '^deployments/' | awk -F/ '{print $2}' | sort -u)
         dags_only=1
 
         for file in $files; do
