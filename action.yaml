@@ -89,8 +89,12 @@ runs:
       with:
         fetch-depth: 2
         clean: false
+    - name: Fetch commit from before PR
+      run: |
+        get fetch origin ${{ github.event.before }}
+      shell: bash
     # Determine if only DAGs have changes
-    - name: Install Astro
+    - name: Install Astro CLI
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }}
       shell: bash
