@@ -269,9 +269,6 @@ runs:
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
-        branch=$(echo "${GITHUB_REF#refs/heads/}")
-        echo "Branch pushed to: $branch"
-        git fetch origin $branch
         files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
         echo "files changed: $files"
         dags_only=1
