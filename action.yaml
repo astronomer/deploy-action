@@ -272,6 +272,7 @@ runs:
         echo "Branch pushed to: $branch"
         git fetch origin $branch
         files=$(git diff --name-only origin/$branch...HEAD)
+        echo "files changed: $files"
         dags_only=1
 
         for file in $files; do
