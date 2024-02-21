@@ -89,8 +89,12 @@ runs:
       with:
         fetch-depth: 2
         clean: false
+    - name: Fetch commit from before PR
+      run: |
+        git fetch origin ${{ github.event.before }}
+      shell: bash
     # Determine if only DAGs have changes
-    - name: Install Astro
+    - name: Install Astro CLI
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }}
       shell: bash
@@ -264,7 +268,7 @@ runs:
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
-        files=$(git diff --name-only HEAD^..HEAD)
+        files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
         dags_only=1
 
         for file in $files; do
