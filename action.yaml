@@ -85,7 +85,7 @@ runs:
   steps:
     - name: checkout repo
       uses: actions/checkout@v4
-      if: ${{ inputs.checkout == true }}
+      if: ${{ inputs.checkout }} == true
       with:
         fetch-depth: 0  # Fetch all history
         ref: ${{ github.event.before }} 
@@ -265,6 +265,7 @@ runs:
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
+        
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
