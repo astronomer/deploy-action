@@ -85,9 +85,10 @@ runs:
   steps:
     - name: checkout repo
       uses: actions/checkout@v4
-      if: inputs.checkout == true
+      if: ${{ inputs.checkout == true }}
       with:
-        fetch-depth: 2
+        fetch-depth: 0  # Fetch all history
+        ref: ${{ github.event.before }} 
         clean: false
     # - name: Fetch commit from before PR
     #   run: |
@@ -270,10 +271,8 @@ runs:
         cd ${{ inputs.root-folder }}
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
-        files=$(git diff --name-only HEAD^..HEAD)
-         echo "files changed: $files"
-        git fetch origin main
-        files=$(git diff --name-only origin/main...HEAD)
+        git fetch origin $branch
+        files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
         echo "files changed: $files"
         dags_only=1
 
