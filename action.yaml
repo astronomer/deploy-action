@@ -268,7 +268,10 @@ runs:
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
-        files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+        branch=$(echo "${GITHUB_REF#refs/heads/}")
+        echo "Branch pushed to: $branch"
+        git fetch origin $branch
+        files=$(git diff --name-only origin/$branch...HEAD)
         dags_only=1
 
         for file in $files; do
