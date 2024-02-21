@@ -270,8 +270,8 @@ runs:
         cd ${{ inputs.root-folder }}
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
-        git fetch origin $branch
-        files=$(git diff --name-only origin/$branch...HEAD)
+        git fetch origin main
+        files=$(git diff --name-only origin/main...HEAD)
         echo "files changed: $files"
         dags_only=1
 
