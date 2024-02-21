@@ -91,7 +91,7 @@ runs:
         clean: false
     - name: Fetch commit from before PR
       run: |
-        get fetch origin ${{ github.event.before }}
+        git fetch origin ${{ github.event.before }}
       shell: bash
     # Determine if only DAGs have changes
     - name: Install Astro CLI
