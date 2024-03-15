@@ -88,7 +88,7 @@ runs:
       if: ${{ inputs.checkout }} == true
       with:
         fetch-depth: 0  # Fetch all history
-        ref: ${{ github.event.before }} 
+        ref: ${{ github.event.after }} 
         clean: false
     # Determine if only DAGs have changes
     - name: Install Astro CLI
