@@ -85,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.2
+      uses: astronomer/deploy-action@v0.4
       with:
         deployment-id: <deployment id>
         parse: true
@@ -100,7 +100,7 @@ In the following example, the folder `/example-dags/dags` is specified as the DA
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.2
+  uses: astronomer/deploy-action@v0.4
   with:
     deployment-id: <deployment id>
     root-folder: /example-dags/dags/
@@ -113,7 +113,7 @@ In the following example, the pytest located at `/tests/test-tags.py` runs befor
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.2
+  uses: astronomer/deploy-action@v0.4
   with:
     deployment-id: <deployment id>
     pytest: true
@@ -127,7 +127,7 @@ In the following example, `force` is enabled and both the DAG parse and pytest p
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.2
+  uses: astronomer/deploy-action@v0.4
   with:
     deployment-id: <deployment id>
     force: true
@@ -170,7 +170,7 @@ jobs:
         build-args: |
           <your-build-arguments>
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.2
+      uses: astronomer/deploy-action@v0.4
       with:
         deployment-id: <deployment id>
         image-name: ${{ steps.image_tag.outputs.image_tag }}
@@ -205,7 +205,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.2
+      uses: astronomer/deploy-action@v0.4
       with:
         action: create-deployment-preview
         deployment-id: <orginal deployment id>
@@ -230,7 +230,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.2
+      uses: astronomer/deploy-action@v0.4
       with:
         action: deploy-deployment-preview
         deployment-id: <orginal deployment id>
@@ -255,7 +255,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.2
+      uses: astronomer/deploy-action@v0.4
       with:
         action: delete-deployment-preview
         deployment-id: <orginal deployment id>
@@ -280,7 +280,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.2
+      uses: astronomer/deploy-action@v0.4
       with:
         deployment-id: <orginal deployment id>
 ```
