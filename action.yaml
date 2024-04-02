@@ -88,7 +88,7 @@ runs:
       if: ${{ inputs.checkout }} == true
       with:
         fetch-depth: 0  # Fetch all history
-        ref: ${{ github.event.after }} 
+        ref: ${{ github.event.after }}
         clean: false
     # Determine if only DAGs have changes
     - name: Install Astro CLI
@@ -265,7 +265,6 @@ runs:
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
-        
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
