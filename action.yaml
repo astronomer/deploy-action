@@ -75,6 +75,10 @@ inputs:
       `description: "Deployed from commit ..."` with the value of `github.event.after`.
       This would display e.g. "Deployed from commit da39a3ee5e6b4b0d3255bfef95601890afd80709".
       Reference: https://docs.github.com/en/webhooks/webhook-events-and-payloads#push.
+  deploy-image:
+    required: false
+    default: false
+    description: "If true image and DAGs will deploy"
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -88,7 +92,7 @@ runs:
       if: ${{ inputs.checkout }} == true
       with:
         fetch-depth: 0  # Fetch all history
-        ref: ${{ github.event.after }} 
+        ref: ${{ github.event.after }}
         clean: false
     # Determine if only DAGs have changes
     - name: Install Astro CLI
@@ -265,7 +269,6 @@ runs:
     - name: Get Deployment Type
       run: |
         cd ${{ inputs.root-folder }}
-        
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
@@ -288,6 +291,11 @@ runs:
         if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == true ]]; then
           # skip all deploy steps
           dags_only=2
+        fi
+
+        if [[ ${{ inputs.deploy-image }} == true ]]; then
+          # make sure image and DAGs deploys because deploy-image is true
+          dags_only=0
         fi
 
         echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
