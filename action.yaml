@@ -89,12 +89,11 @@ runs:
   steps:
     - name: checkout repo
       uses: actions/checkout@v4
-      if: ${{ inputs.checkout }} == true
+      if: inputs.checkout == 'true'
       with:
         fetch-depth: 0  # Fetch all history
         ref: ${{ github.event.after }}
         clean: false
-    # Determine if only DAGs have changes
     - name: Install Astro CLI
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }}
