@@ -89,7 +89,7 @@ runs:
   steps:
     - name: checkout repo
       uses: actions/checkout@v4
-      if: ${{ inputs.checkout }} == true
+      if: ${{ inputs.checkout }}
       with:
         fetch-depth: 0  # Fetch all history
         ref: ${{ github.event.after }}
