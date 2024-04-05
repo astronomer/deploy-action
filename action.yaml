@@ -94,7 +94,7 @@ runs:
         fetch-depth: 0  # Fetch all history
         ref: ${{ github.event.after }}
         clean: false
-     - name: checkout debug 
+    - name: checkout debug 
       run: |
         echo ${{ inputs.checkout }}
       shell: bash
