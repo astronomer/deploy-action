@@ -93,9 +93,9 @@ jobs:
 
 Use the following topics to further configure the action based on your needs.
 
-### Change the DAG folder
+### Change the Root folder
 
-In the following example, the folder `/example-dags/dags` is specified as the DAG folder.
+In the following example, the folder `/example-dags/` is specified as the root folder.
 
 ```yaml
 steps:
@@ -103,7 +103,7 @@ steps:
   uses: astronomer/deploy-action@v0.4
   with:
     deployment-id: <deployment id>
-    root-folder: /example-dags/dags/
+    root-folder: /example-dags/
 ```
 
 ### Run Pytests
