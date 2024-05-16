@@ -269,12 +269,13 @@ runs:
       shell: bash
       id: dag-deploy-enabled
     - name: Get Deployment Type
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == 'false'
       run: |
         cd ${{ inputs.root-folder }}
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
-        files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+        files=$(git diff --name-only $(git rev-parse HEAD^) ${{ github.event.after }})
         echo "files changed: $files"
         dags_only=1
 
@@ -290,11 +291,6 @@ runs:
           dags_only=0
         fi
 
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == true ]]; then
-          # skip all deploy steps
-          dags_only=2
-        fi
-
         if [[ ${{ inputs.deploy-image }} == true ]]; then
           # make sure image and DAGs deploys because deploy-image is true
           dags_only=0
@@ -305,6 +301,7 @@ runs:
       id: deployment-type
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: setup deploy options
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == 'false'
       run: |
         options=""
 
@@ -357,19 +354,20 @@ runs:
         fi
       shell: bash
     - name: DAG Deploy to Astro
-      if: steps.deployment-type.outputs.DAGS_ONLY == 1
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == 'false' && steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
         cd ${{ inputs.root-folder }}
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
-      if: steps.deployment-type.outputs.DAGS_ONLY == 0
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == 'false' && steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
         cd ${{ inputs.root-folder }}
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == 'false'
       run: |
         if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
           if [[ ${{ inputs.copy-connections }} == true ]]; then
