@@ -266,6 +266,7 @@ runs:
       shell: bash
       id: dag-deploy-enabled
     - name: Get Deployment Type
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false
       run: |
         cd ${{ inputs.root-folder }}
         branch=$(echo "${GITHUB_REF#refs/heads/}")
@@ -287,11 +288,6 @@ runs:
           dags_only=0
         fi
 
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == true ]]; then
-          # skip all deploy steps
-          dags_only=2
-        fi
-
         if [[ ${{ inputs.deploy-image }} == true ]]; then
           # make sure image and DAGs deploys because deploy-image is true
           dags_only=0
@@ -302,6 +298,7 @@ runs:
       id: deployment-type
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: setup deploy options
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false
       run: |
         options=""
 
@@ -347,6 +344,7 @@ runs:
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false
       run: |
         if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
           if [[ ${{ inputs.copy-connections }} == true ]]; then
