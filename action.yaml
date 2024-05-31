@@ -272,7 +272,7 @@ runs:
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
-        files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+        files=$(git diff --name-only $(git rev-parse HEAD^) ${{ github.event.after }})
         echo "files changed: $files"
         dags_only=1
 
