@@ -48,19 +48,30 @@ The following table lists the configuration options for the Deploy to Astro acti
 
 | Name | Default | Description |
 | ---|---|--- |
-| `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. Don't sepcify anything if you are deploying to a regular deployment |
-| `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too |
+| `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. Don't sepcify anything if you are deploying to a regular deployment. |
+| `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too. |
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
-| `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder |
+| `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder. |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro. Note that when an image deploy is performed (i.e. `astro deploy`), parsing is also executed by default. Parsing is _not_ performed automatically for DAG-only deploys (i.e. `astro deploy --dags`). |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
-| `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`|
-| `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors |
-| `image-name` | | Specifies a custom, locally built image to deploy |
+| `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`.|
+| `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors. |
+| `image-name` | | Specifies a custom, locally built image to deploy. |
 | `workspace` | | Workspace id to select. Only required when `ASTRO_API_TOKEN` is given an organization token. |
-| `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name |
-| `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action |
+| `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name. |
+| `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action. |
+| `deploy-image` | `false` | If true image and DAGs will deploy for any action that deploys code. |
+| `build-secrets` | `` | Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'. |
+
+
+## Outputs
+
+The following table lists the outputs for the Deploy to Astro action.
+
+| Name | Description |
+| ---|--- |
+| `preview-id` | The ID of the created deployment preview. Only works when action=create-deployment-preview. |
 
 
 ## Workflow file examples
