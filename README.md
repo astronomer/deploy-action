@@ -150,7 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ## Set API Token as an environment variable
-      ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN
+      ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
     steps:
     - name: Check out the repo
       uses: actions/checkout@v3
