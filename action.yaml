@@ -45,6 +45,10 @@ inputs:
   preview-name:
     required: false
     description: "Custom preview name. By default this is <branch-name>_<deployment-name>."
+  deploy:
+    required: false
+    default: true
+    description: "If true the Astro project will be deployed to the Deployment."
   copy-connections:
     required: false
     default: true
@@ -344,15 +348,19 @@ runs:
     - name: DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
-        cd ${{ inputs.root-folder }}
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        if [[ ${{ inputs.deploy }} == true ]]; then
+          cd ${{ inputs.root-folder }}
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 0
       run: |
-        cd ${{ inputs.root-folder }}
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
+        if [[ ${{ inputs.deploy }} == true ]]; then
+          cd ${{ inputs.root-folder }}
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
       run: |
