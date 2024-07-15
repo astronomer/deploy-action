@@ -365,11 +365,6 @@ runs:
         cd ${{ inputs.root-folder }}
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
       shell: bash
-    - name: Remove override on Deployment to resume schedule
-      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false && steps.development-mode.outputs.DEVELOPMENT_MODE == true
-      run: |
-        astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --remove-override --force
-      shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
       run: |
         if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
@@ -383,4 +378,9 @@ runs:
             astro deployment pool copy --source-id ${{steps.deployment-preview.outputs.ORIGINAL_DEPLOYMENT_ID}} --target-id ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}}
           fi
         fi
+      shell: bash
+    - name: Remove override on Deployment to resume schedule
+      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false && steps.development-mode.outputs.DEVELOPMENT_MODE == true
+      run: |
+        astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --remove-override --force
       shell: bash
