@@ -342,15 +342,19 @@ runs:
       shell: bash
       id: deploy-options
     - name: Determine if Development Mode is enabled
-      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false
       run: |
-        echo "DEVELOPMENT_MODE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.is_development_mode)" >> $GITHUB_OUTPUT
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false ]]; then
+          echo "DEVELOPMENT_MODE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.is_development_mode)" >> $GITHUB_OUTPUT
+        fi
       shell: bash
       id: development-mode
     - name: Override to wake up the Deployment
-      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false && steps.development-mode.outputs.DEVELOPMENT_MODE == true
       run: |
-        astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --force
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false && ${{steps.development-mode.outputs.DEVELOPMENT_MODE}} == true ]]; then
+          astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --force
+          # Give it some time to wake up
+          sleep 60
+        fi
       shell: bash
     - name: DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
@@ -380,7 +384,8 @@ runs:
         fi
       shell: bash
     - name: Remove override on Deployment to resume schedule
-      if: steps.deployment-preview.outputs.SKIP_DEPLOY == false && steps.development-mode.outputs.DEVELOPMENT_MODE == true
       run: |
-        astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --remove-override --force
+        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false && ${{steps.development-mode.outputs.DEVELOPMENT_MODE}} == true ]]; then
+          astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --remove-override --force
+        fi
       shell: bash
