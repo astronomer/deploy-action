@@ -82,6 +82,14 @@ inputs:
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
+  dbt-root-folder:
+    required: false
+    default: ./
+    description: "Path to the dbt project folder that contains the 'dbt_project.yml' file."
+  bundle-mount-path:
+    required: false
+    default: ""
+    description: "Path describing where to mount the dbt project in Airflow, so that it is accessible to your DAGs."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -253,6 +261,20 @@ runs:
           ACTION=deploy
         fi
 
+        # if action is dbt deploy set final Deployment id to Deployment id
+        if [[ ${{ inputs.action }} == dbt-deploy ]]; then
+          echo "FINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+          # don't skip deploy
+          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
+
+          # not image deploy only
+          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
+
+          # set action
+          ACTION=dbt-deploy
+        fi
+
         if [[ $ACTION == nothing ]]; then
           echo ERROR: you specified an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
           exit 1 # terminate and indicate error
@@ -286,6 +308,7 @@ runs:
           fi
         done
 
+
         if [[ ${{steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED}} == false ]]; then
           dags_only=0
         fi
@@ -298,6 +321,23 @@ runs:
         if [[ ${{ inputs.deploy-image }} == true ]]; then
           # make sure image and DAGs deploys because deploy-image is true
           dags_only=0
+        fi
+
+        if [[ ${{inputs.deploy-dbt}} == true ]]; then
+          cd ${{ inputs.dbt-root-folder }}
+          branch=$(echo "${GITHUB_REF#refs/heads/}")
+          echo "Branch pushed to: $branch"
+          git fetch origin $branch
+          files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+          echo "files changed: $files"
+          dags_only=1
+
+          # if no files changed, do not deploy
+          if [ -z "$files" ]; then
+            dags_only=2 # do not deploy
+          else
+            dags_only=3 # files changed, do a dbt deploy
+          fi
         fi
 
         echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
@@ -341,6 +381,23 @@ runs:
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
       shell: bash
       id: deploy-options
+    - name: setup bundle deploy options
+      run: |
+        bundle-options=""
+
+        # Add mount path option
+        if [[ "${{ inputs.bundle-mount-path }}" != '' ]]; then
+          options="$options --mount-path '${{ inputs.bundle-mount-path }}'"
+        fi
+
+        # Add description option
+        if [[ "${{ inputs.description }}" != '' ]]; then
+          options="$options --description '${{ inputs.description }}'"
+        f
+
+        echo "BUNDLE_OPTIONS=$bundle-options" >> $GITHUB_OUTPUT
+      shell: bash
+      id: deploy-options
     - name: DAG Deploy to Astro
       if: steps.deployment-type.outputs.DAGS_ONLY == 1
       run: |
@@ -353,6 +410,12 @@ runs:
       run: |
         cd ${{ inputs.root-folder }}
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
+      shell: bash
+    - name: dbt Deploy to Astro
+      if: steps.deployment-type.outputs.DAGS_ONLY == 3
+      run: |
+        cd ${{ inputs.dbt-root-folder }}
+        astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.BUNDLE_OPTIONS}}
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
       run: |
