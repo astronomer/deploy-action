@@ -79,6 +79,10 @@ inputs:
     required: false
     default: false
     description: "If true image and DAGs will deploy"
+  dag-only-deploy:
+    required: false
+    default: false
+    description: "If true only DAGs will deploy"
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
@@ -298,6 +302,11 @@ runs:
         if [[ ${{ inputs.deploy-image }} == true ]]; then
           # make sure image and DAGs deploys because deploy-image is true
           dags_only=0
+        fi
+
+        if [[ ${{ inputs.dag-only-deploy }} == true ]]; then
+          # make sure only DAGs deploys because dag-only-deploy is true
+          dags_only=1
         fi
 
         echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT

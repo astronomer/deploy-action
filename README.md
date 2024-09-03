@@ -62,6 +62,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name. |
 | `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action. Your custom checkout step needs to have `fetch-depth` of `0` and `ref` equal to `${{ github.event.after }}` so all the commits in the PR are checked out. Look at the checkout step that runs within this action for reference. |
 | `deploy-image` | `false` | If true image and DAGs will deploy for any action that deploys code. |
+| `dag-only-deploy` | `false` | If true only DAGs will deploy. |
 | `build-secrets` | `` | Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'. |
 
 
