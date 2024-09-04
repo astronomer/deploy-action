@@ -344,11 +344,17 @@ runs:
     - name: Determine if Development Mode is enabled
       run: |
         if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false ]]; then
-          DEV_MODE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.is_development_mode)
-          if [[ $DEV_MODE == "" ]]; then
-            echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
+          DEPLOYMENT_TYPE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.deployment_type)
+          # only inspect development mode if deployment is not hybrid
+          if [[ $DEPLOYMENT_TYPE != "HYBRID" ]]; then
+            DEV_MODE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.is_development_mode)
+            if [[ $DEV_MODE == "" ]]; then
+              echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
+            else
+              echo "DEVELOPMENT_MODE=$DEV_MODE" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "DEVELOPMENT_MODE=$DEV_MODE" >> $GITHUB_OUTPUT
+            echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
           fi
         fi
       shell: bash
