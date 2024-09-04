@@ -82,7 +82,7 @@ inputs:
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
-  submodule:
+  checkout-submodules:
     required: false
     default: false
     description: "Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`."
@@ -101,7 +101,7 @@ runs:
         fetch-depth: 0 # Fetch all history
         ref: ${{ github.event.after }}
         clean: false
-        submodules: ${{ inputs.submodule }}
+        submodules: ${{ inputs.checkout-submodules }}
     - name: Install Astro CLI
       run: |
         curl -sSL https://install.astronomer.io | sudo bash -s ${{ inputs.cli-version }}
