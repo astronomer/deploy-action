@@ -2,8 +2,8 @@ name: "Deploy Apache Airflow DAGs to Astro"
 description: "Test your DAGs and deploy your Astro project to a Deployment on Astro, Astronomer's managed Airflow service."
 author: "Astronomer"
 branding:
-  icon: 'upload-cloud'
-  color: 'purple'
+  icon: "upload-cloud"
+  color: "purple"
 inputs:
   root-folder:
     required: false
@@ -94,7 +94,7 @@ runs:
       uses: actions/checkout@v4
       if: inputs.checkout == 'true'
       with:
-        fetch-depth: 0  # Fetch all history
+        fetch-depth: 0 # Fetch all history
         ref: ${{ github.event.after }}
         clean: false
     - name: Install Astro CLI
@@ -344,7 +344,18 @@ runs:
     - name: Determine if Development Mode is enabled
       run: |
         if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false ]]; then
-          echo "DEVELOPMENT_MODE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.is_development_mode)" >> $GITHUB_OUTPUT
+          DEPLOYMENT_TYPE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.deployment_type)
+          # only inspect development mode if deployment is not hybrid
+          if [[ $DEPLOYMENT_TYPE != "HYBRID" ]]; then
+            DEV_MODE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.is_development_mode)
+            if [[ $DEV_MODE == "" ]]; then
+              echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
+            else
+              echo "DEVELOPMENT_MODE=$DEV_MODE" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
+          fi
         fi
       shell: bash
       id: development-mode
