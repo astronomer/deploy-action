@@ -361,6 +361,8 @@ runs:
           else
             echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
           fi
+        else
+          echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
         fi
       shell: bash
       id: development-mode

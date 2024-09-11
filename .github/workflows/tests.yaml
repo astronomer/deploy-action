@@ -1,0 +1,342 @@
+name: E2E Tests for Astro Deploy Action
+
+on:
+  push:
+    branches:
+      - main
+      - e2e-tests
+  workflow_dispatch:
+
+# To ensure that only one workflow runs at a time, and other wait for previous workflow to finish
+concurrency:
+  group: e2e-tests
+  cancel-in-progress: false
+
+env:
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+  ORGANIZATION_ID: ${{ secrets.ORGANIZATION_ID }}
+  WORKSPACE_ID: ${{ secrets.WORKSPACE_ID }}
+  DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+  ASTRONOMER_HOST: ${{ secrets.ASTRONOMER_HOST }}
+
+jobs:
+  dag-deploy-test:
+    name: DAG Deploy Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Set CLI context
+        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Deploy to Astro
+        uses: ./
+        with:
+          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          workspace: ${{ secrets.WORKSPACE_ID }}
+          parse: true
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_dag_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+
+  pytests-test:
+    name: Pytest Test
+    runs-on: ubuntu-latest
+    needs: dag-deploy-test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+      - name: Set CLI context
+        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Run Pytest
+        uses: ./
+        with:
+          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          workspace: ${{ secrets.WORKSPACE_ID }}
+          pytest: true
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+
+  custom-docker-image-test:
+    name: Custom Docker Image Test
+    runs-on: ubuntu-latest
+    needs: pytests-test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+      - name: Build Docker image
+        run: cd e2e-setup/astro-project && docker build -t custom-image:latest .
+
+      - name: Set CLI context
+        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Deploy to Astro
+        uses: ./
+        with:
+          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          workspace: ${{ secrets.WORKSPACE_ID }}
+          image-name: custom-image:latest
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desiredDagTarballVersion }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+
+  # these tests can run in parallel since it operates on a different deployment, so it won't interfere with the above tests
+  deployment-preview-test:
+    name: Deployment Preview Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        id: install-pre-reqs
+        run: |
+
+          sudo apt-get install jq
+
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+          # Generate a random preview_id and set it as an environment variable
+          preview_id=$(( RANDOM % 1000 ))
+          echo "preview_id=$preview_id" >> $GITHUB_ENV
+
+      - name: Set CLI context
+        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Create Deployment Preview
+        id: create-deployment-preview
+        uses: ./
+        with:
+          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          workspace: ${{ secrets.WORKSPACE_ID }}
+          action: create-deployment-preview
+          preview-name: test-preview-${{ env.preview_id }}
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after-create-preview
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Validate Deploy Action
+        id: validate-deployment-preview-create
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          dag_tarball_version_before: ""
+          image_version_before: "12.1.0"
+          dag_tarball_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_image_version }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before-deploy
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Deploy to Deployment Preview
+        id: deployment-preview-deploy
+        uses: ./
+        with:
+          deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          workspace: ${{ secrets.WORKSPACE_ID }}
+          action: deploy-deployment-preview
+          root-folder: e2e-setup/astro-project
+          preview-name: test-preview-${{ env.preview_id }}
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after-deploy-preview
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ steps.deployment-preview-deploy.outputs.preview-id }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Validate Deploy Action
+        id: validate-deployment-preview-deploy
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          dag_tarball_version_before: ${{ steps.get-deployment-before-deploy.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before-deploy.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after-deploy-preview.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after-deploy-preview.outputs.desired_image_version }}
+
+      - name: Mock git commands for DAG Deploy
+        run: |
+          mv e2e-setup/mocks/git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Get Deployment Info Before DAG Deploy Test
+        id: get-deployment-before-dag-deploy
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: DAG Deploy to Astro
+        id: deployment-preview-dag-deploy
+        uses: ./
+        with:
+          deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          workspace: ${{ secrets.WORKSPACE_ID }}
+          parse: true
+          root-folder: e2e-setup/astro-project
+          preview-name: test-preview-${{ env.preview_id }}
+
+      - name: Get Deployment Info After DAG Deploy Test
+        id: get-deployment-after-dag-deploy
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ steps.deployment-preview-dag-deploy.outputs.preview-id }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+      - name: Validate DAG Deploy Action
+        id: validate-dag-deploy-action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_dag_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before-dag-deploy.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before-dag-deploy.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after-dag-deploy.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after-dag-deploy.outputs.desired_image_version }}
+
+      - name: Delete Deployment Preview
+        id: delete-deployment-preview
+        # ensure that we always try delete the deployment preview even if the previous steps fail
+        if: always()
+        uses: ./
+        with:
+          deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          workspace: ${{ secrets.WORKSPACE_ID }}
+          action: delete-deployment-preview
+          preview-name: test-preview-${{ env.preview_id }}
+
+      - name: Validate Deployment Preview Deletion
+        id: validate-deployment-preview-deletion
+        # ensure that we always try delete the deployment preview even if the previous steps fail
+        if: always()
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          expected_status_code: 404
+          deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}

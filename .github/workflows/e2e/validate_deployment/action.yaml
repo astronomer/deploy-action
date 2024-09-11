@@ -1,0 +1,45 @@
+name: Validate Deployment
+description: Validate deployment info from Astronomer API
+
+inputs:
+  is_dag_only_deploy:
+    description: Whether the deploy operation was DAG-only
+    default: false
+  dag_tarball_version_before:
+    description: The desired DAG tarball version before the test
+    required: true
+  image_version_before:
+    description: The image version before the test
+    required: true
+  dag_tarball_version_after:
+    description: The desired DAG tarball version after the test
+    required: true
+  image_version_after:
+    description: The image version after the test
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate Deployment
+      id: validate-deployment
+      shell: bash
+      run: |
+
+        # If it's dag only deploy then validate that only desiredDagTarballVersion was updated
+        if [[ "${{ inputs.is_dag_only_deploy }}" == "true" ]]; then
+          if [[ "${{ inputs.dag_tarball_version_before }}" != "${{ inputs.dag_tarball_version_after }}" && "${{ inputs.image_version_before }}" == "${{ inputs.image_version_after }}" ]]; then  
+            echo "Deploy Action validation succeeded: desiredDagTarballVersion only updated"
+            exit 0
+          fi
+          echo "Deploy Action validation failed"
+          exit 1
+        fi
+
+        # If it's not dag only deploy then validate that both desiredDagTarballVersion and imageVersion were updated
+        if [[ "${{ inputs.dag_tarball_version_before }}" != "${{ inputs.dag_tarball_version_after }}" && "${{ inputs.image_version_before }}" != "${{ inputs.image_version_after }}" ]]; then
+          echo "Deploy Action validation succeeded: desiredDagTarballVersion and imageVersion updated"
+          exit 0
+        fi
+        echo "Deploy Action validation failed: neither desiredDagTarballVersion or imageVersion were updated after the test"
+        exit 1
