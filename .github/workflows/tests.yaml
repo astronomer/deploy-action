@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - e2e-tests
   workflow_dispatch:
 
 # To ensure that only one workflow runs at a time, and other wait for previous workflow to finish
