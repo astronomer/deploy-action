@@ -7,25 +7,73 @@ on:
       - e2e-tests
   workflow_dispatch:
 
-# To ensure that only one workflow runs at a time, and other wait for previous workflow to finish
-concurrency:
-  group: e2e-tests
-  cancel-in-progress: false
-
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
-  ORGANIZATION_ID: ${{ secrets.ORGANIZATION_ID }}
-  WORKSPACE_ID: ${{ secrets.WORKSPACE_ID }}
-  DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
-  ASTRONOMER_HOST: ${{ secrets.ASTRONOMER_HOST }}
 
 jobs:
-  dag-deploy-test:
-    name: DAG Deploy Test
+  # Create test deployments would use the template files and generate deployments with unique names
+  create-test-deployments:
+    name: Create Deployment
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        deployment: [deployment-hibernate.yaml, deployment.yaml]
+    outputs:
+      DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
+      HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+
+          sudo add-apt-repository ppa:rmescandon/yq
+          sudo apt update
+          sudo apt install yq -y
+
+          curl -sSL https://install.astronomer.io | sudo bash -s
+          astro context switch ${{ secrets.ASTRONOMER_HOST }}
+          astro workspace switch ${{ secrets.WORKSPACE_ID }}
+
+          # Generate a random test_uid and set it as an environment variable, so we can append it to the deployment name
+          test_uid=$(uuidgen)
+          echo "test_uid=$test_uid" >> $GITHUB_ENV
+
+      - name: Create Deployment
+        id: create-deployment
+        run: |
+
+          # Update the deployment name to maintain uniqueness
+          sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  e2e-setup/deployment-templates/${{ matrix.deployment }}
+
+          DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
+          if [[ "${{ matrix.deployment }}" == "deployment.yaml" ]]; then
+            echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          else
+            echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          fi
+
+  # DAG Deploy test would test the DAG only deploy functionality in deploy action
+  dag-deploy-test:
+    name: DAG Deploy Test
+    runs-on: ubuntu-latest
+    needs: create-test-deployments
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
 
       - name: Install dependencies
         run: |
@@ -34,11 +82,6 @@ jobs:
           # we need to pre-install the CLI to set the context
           curl -sSL https://install.astronomer.io | sudo bash -s
 
-      - name: Mock git commands
-        run: |
-          mv e2e-setup/mocks/git.sh /usr/local/bin/git
-          chmod +x /usr/local/bin/git
-
       - name: Set CLI context
         run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
 
@@ -46,7 +89,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment_id: ${{ matrix.deployment_id }}
           organization_id: ${{ secrets.ORGANIZATION_ID }}
           astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
           astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
@@ -54,7 +97,7 @@ jobs:
       - name: Deploy to Astro
         uses: ./
         with:
-          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ secrets.WORKSPACE_ID }}
           parse: true
           root-folder: e2e-setup/astro-project
@@ -63,7 +106,7 @@ jobs:
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment_id: ${{ matrix.deployment_id }}
           organization_id: ${{ secrets.ORGANIZATION_ID }}
           astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
           astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
@@ -80,7 +123,14 @@ jobs:
   pytests-test:
     name: Pytest Test
     runs-on: ubuntu-latest
-    needs: dag-deploy-test
+    needs: [dag-deploy-test, create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -100,7 +150,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment_id: ${{ matrix.deployment_id }}
           organization_id: ${{ secrets.ORGANIZATION_ID }}
           astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
           astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
@@ -108,7 +158,7 @@ jobs:
       - name: Run Pytest
         uses: ./
         with:
-          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ secrets.WORKSPACE_ID }}
           pytest: true
           root-folder: e2e-setup/astro-project
@@ -117,7 +167,7 @@ jobs:
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment_id: ${{ matrix.deployment_id }}
           organization_id: ${{ secrets.ORGANIZATION_ID }}
           astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
           astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
@@ -133,7 +183,14 @@ jobs:
   custom-docker-image-test:
     name: Custom Docker Image Test
     runs-on: ubuntu-latest
-    needs: pytests-test
+    needs: [pytests-test, create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -156,7 +213,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment_id: ${{ matrix.deployment_id }}
           organization_id: ${{ secrets.ORGANIZATION_ID }}
           astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
           astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
@@ -164,7 +221,7 @@ jobs:
       - name: Deploy to Astro
         uses: ./
         with:
-          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ secrets.WORKSPACE_ID }}
           image-name: custom-image:latest
           root-folder: e2e-setup/astro-project
@@ -173,7 +230,7 @@ jobs:
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment_id: ${{ matrix.deployment_id }}
           organization_id: ${{ secrets.ORGANIZATION_ID }}
           astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
           astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
@@ -186,10 +243,18 @@ jobs:
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desiredDagTarballVersion }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
 
-  # these tests can run in parallel since it operates on a different deployment, so it won't interfere with the above tests
+  # Deployment preview tests can run in parallel to above tests since it operates on a different deployment, so it won't interfere with the above tests
   deployment-preview-test:
     name: Deployment Preview Test
     runs-on: ubuntu-latest
+    needs: create-test-deployments
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -203,10 +268,6 @@ jobs:
           # we need to pre-install the CLI to set the context
           curl -sSL https://install.astronomer.io | sudo bash -s
 
-          # Generate a random preview_id and set it as an environment variable
-          preview_id=$(( RANDOM % 1000 ))
-          echo "preview_id=$preview_id" >> $GITHUB_ENV
-
       - name: Set CLI context
         run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
 
@@ -214,11 +275,15 @@ jobs:
         id: create-deployment-preview
         uses: ./
         with:
-          deployment-id: ${{ secrets.DEPLOYMENT_ID }}
+          deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ secrets.WORKSPACE_ID }}
           action: create-deployment-preview
-          preview-name: test-preview-${{ env.preview_id }}
+          preview-name: test-preview-${{ matrix.deployment_id }}
           root-folder: e2e-setup/astro-project
+          # TODO: allow copying airflow resources, once we add wait in the deploy action for deployment preview to be healthy
+          copy-connections: false
+          copy-airflow-variables: false
+          copy-pools: false
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-create-preview
@@ -255,7 +320,7 @@ jobs:
           workspace: ${{ secrets.WORKSPACE_ID }}
           action: deploy-deployment-preview
           root-folder: e2e-setup/astro-project
-          preview-name: test-preview-${{ env.preview_id }}
+          preview-name: test-preview-${{ matrix.deployment_id }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-deploy-preview
@@ -297,7 +362,7 @@ jobs:
           workspace: ${{ secrets.WORKSPACE_ID }}
           parse: true
           root-folder: e2e-setup/astro-project
-          preview-name: test-preview-${{ env.preview_id }}
+          preview-name: test-preview-${{ matrix.deployment_id }}
 
       - name: Get Deployment Info After DAG Deploy Test
         id: get-deployment-after-dag-deploy
@@ -327,7 +392,7 @@ jobs:
           deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
           workspace: ${{ secrets.WORKSPACE_ID }}
           action: delete-deployment-preview
-          preview-name: test-preview-${{ env.preview_id }}
+          preview-name: test-preview-${{ matrix.deployment_id }}
 
       - name: Validate Deployment Preview Deletion
         id: validate-deployment-preview-deletion
@@ -340,3 +405,31 @@ jobs:
           organization_id: ${{ secrets.ORGANIZATION_ID }}
           astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
           astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+
+  delete-test-deployments:
+    name: Delete Deployment
+    runs-on: ubuntu-latest
+    needs:
+      [
+        create-test-deployments,
+        dag-deploy-test,
+        pytests-test,
+        custom-docker-image-test,
+        deployment-preview-test,
+      ]
+    # ensure that we always try delete the deployment even if any of the tests fail
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Astro CLI and set context
+        run: |
+          curl -sSL https://install.astronomer.io | sudo bash -s
+          astro context switch ${{ secrets.ASTRONOMER_HOST }}
+          astro workspace switch ${{ secrets.WORKSPACE_ID }}
+
+      - name: Delete Deployment
+        run: |
+          astro deployment delete -f ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          astro deployment delete -f ${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
