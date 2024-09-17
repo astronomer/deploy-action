@@ -2,28 +2,28 @@ name: Get Astro Environment Info
 description: Get information about the Astro environment
 inputs:
   input_workspace_id:
-    description: The workspace ID via input
+    description: The workspace ID specified via user input
     required: true
   secret_workspace_id:
-    description: The workspace ID via secret
+    description: The workspace ID via pre configured secret
     required: true
   input_organization_id:
-    description: The organization ID via input
+    description: The organization ID specified via user input
     required: true
   secret_organization_id:
-    description: The organization ID via secret
+    description: The organization ID via pre configured secret
     required: true
   input_astro_api_token:
-    description: The Astronomer API token via input
+    description: The Astronomer API token specified via user input
     required: true
   secret_astro_api_token:
-    description: The Astronomer API token via secret
+    description: The Astronomer API token via pre configured secret
     required: true
   input_astronomer_host:
-    description: The Astronomer host via input
+    description: The Astronomer host specified via user input
     required: true
   secret_astronomer_host:
-    description: The Astronomer host via secret
+    description: The Astronomer host via pre configured secret
     required: true
 
 outputs:

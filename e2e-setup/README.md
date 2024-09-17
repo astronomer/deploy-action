@@ -2,6 +2,8 @@
 
 This folder contains the necessary setup for running end-to-end tests for the Astro Deploy Action. Below is the folder structure and a brief description of the contents at the first level.
 
+The E2E tests could be triggered automatically when a new commit is pushed to main, or it could be manually triggered. E2E setup also supports specifying custom Astro environment, organization id, workspace id or organization API token to run these tests when triggered manually from Actions page (if not specified the test setup will pick the default values set as secrets).
+
 ## Folder Structure
 
 e2e-setup/
