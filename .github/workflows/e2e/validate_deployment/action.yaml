@@ -1,4 +1,4 @@
-name: Validate Deployment
+name: Validate Deployment Deploy Versions
 description: Validate deployment info from Astronomer API
 
 inputs:

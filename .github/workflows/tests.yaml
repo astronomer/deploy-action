@@ -6,14 +6,53 @@ on:
       - main
       - e2e-tests
   workflow_dispatch:
+    inputs:
+      workspace_id:
+        description: "Workspace ID"
+        required: false
+        default: ""
+      org_id:
+        description: "Organization ID"
+        required: false
+        default: ""
+      astronomer_host:
+        description: "Astronomer Host"
+        required: false
+        default: ""
+      token:
+        description: "API Token"
+        required: false
+        default: ""
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
 
 jobs:
+  redact-inputs:
+    name: Redact Inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Redact Inputs
+        run: |
+
+          # add-mask will redact the value of the input, but will still log the value, 
+          # hence using a known workaround: https://github.com/actions/runner/issues/643
+          WORKSPACE_ID=$(jq -r '.inputs.workspace_id' $GITHUB_EVENT_PATH)
+          echo ::add-mask::$WORKSPACE_ID
+          ORG_ID=$(jq -r '.inputs.org_id' $GITHUB_EVENT_PATH)
+          echo ::add-mask::$ORG_ID
+          ASTRONOMER_HOST=$(jq -r '.inputs.astronomer_host' $GITHUB_EVENT_PATH)
+          echo ::add-mask::$ASTRONOMER_HOST
+          TOKEN=$(jq -r '.inputs.token' $GITHUB_EVENT_PATH)
+          echo ::add-mask::$TOKEN
+
   # Create test deployments would use the template files and generate deployments with unique names
   create-test-deployments:
     name: Create Deployment
+    needs: redact-inputs
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,6 +64,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
       - name: Install dependencies
         run: |
 
@@ -33,8 +85,8 @@ jobs:
           sudo apt install yq -y
 
           curl -sSL https://install.astronomer.io | sudo bash -s
-          astro context switch ${{ secrets.ASTRONOMER_HOST }}
-          astro workspace switch ${{ secrets.WORKSPACE_ID }}
+          astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
           # Generate a random test_uid and set it as an environment variable, so we can append it to the deployment name
           test_uid=$(uuidgen)
@@ -58,7 +110,7 @@ jobs:
   dag-deploy-test:
     name: DAG Deploy Test
     runs-on: ubuntu-latest
-    needs: create-test-deployments
+    needs: [create-test-deployments]
     strategy:
       matrix:
         deployment_id:
@@ -69,6 +121,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
       - name: Mock git commands
         run: |
@@ -83,22 +148,22 @@ jobs:
           curl -sSL https://install.astronomer.io | sudo bash -s
 
       - name: Set CLI context
-        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Get Deployment Info Before Test
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ matrix.deployment_id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Deploy to Astro
         uses: ./
         with:
           deployment-id: ${{ matrix.deployment_id }}
-          workspace: ${{ secrets.WORKSPACE_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           parse: true
           root-folder: e2e-setup/astro-project
 
@@ -107,9 +172,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ matrix.deployment_id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
@@ -135,6 +200,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
       - name: Install dependencies
         run: |
 
@@ -144,23 +222,24 @@ jobs:
           curl -sSL https://install.astronomer.io | sudo bash -s
 
       - name: Set CLI context
-        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Get Deployment Info Before Test
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ matrix.deployment_id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Run Pytest
         uses: ./
         with:
           deployment-id: ${{ matrix.deployment_id }}
-          workspace: ${{ secrets.WORKSPACE_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           pytest: true
+          deploy-image: true
           root-folder: e2e-setup/astro-project
 
       - name: Get Deployment Info After Test
@@ -168,9 +247,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ matrix.deployment_id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
@@ -195,6 +274,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
       - name: Install dependencies
         run: |
 
@@ -207,23 +299,24 @@ jobs:
         run: cd e2e-setup/astro-project && docker build -t custom-image:latest .
 
       - name: Set CLI context
-        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Get Deployment Info Before Test
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ matrix.deployment_id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Deploy to Astro
         uses: ./
         with:
           deployment-id: ${{ matrix.deployment_id }}
-          workspace: ${{ secrets.WORKSPACE_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           image-name: custom-image:latest
+          deploy-image: true
           root-folder: e2e-setup/astro-project
 
       - name: Get Deployment Info After Test
@@ -231,9 +324,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ matrix.deployment_id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
@@ -247,7 +340,7 @@ jobs:
   deployment-preview-test:
     name: Deployment Preview Test
     runs-on: ubuntu-latest
-    needs: create-test-deployments
+    needs: [create-test-deployments]
     strategy:
       matrix:
         deployment_id:
@@ -259,6 +352,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
       - name: Install dependencies
         id: install-pre-reqs
         run: |
@@ -269,14 +375,14 @@ jobs:
           curl -sSL https://install.astronomer.io | sudo bash -s
 
       - name: Set CLI context
-        run: astro context switch ${{ secrets.ASTRONOMER_HOST }}
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Create Deployment Preview
         id: create-deployment-preview
         uses: ./
         with:
           deployment-id: ${{ matrix.deployment_id }}
-          workspace: ${{ secrets.WORKSPACE_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: create-deployment-preview
           preview-name: test-preview-${{ matrix.deployment_id }}
           root-folder: e2e-setup/astro-project
@@ -290,9 +396,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Validate Deploy Action
         id: validate-deployment-preview-create
@@ -308,9 +414,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Deploy to Deployment Preview
         id: deployment-preview-deploy
@@ -320,6 +426,7 @@ jobs:
           workspace: ${{ secrets.WORKSPACE_ID }}
           action: deploy-deployment-preview
           root-folder: e2e-setup/astro-project
+          deploy-image: true
           preview-name: test-preview-${{ matrix.deployment_id }}
 
       - name: Get Deployment Info After Test
@@ -327,9 +434,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ steps.deployment-preview-deploy.outputs.preview-id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Validate Deploy Action
         id: validate-deployment-preview-deploy
@@ -350,9 +457,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: DAG Deploy to Astro
         id: deployment-preview-dag-deploy
@@ -369,9 +476,9 @@ jobs:
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
           deployment_id: ${{ steps.deployment-preview-dag-deploy.outputs.preview-id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
       - name: Validate DAG Deploy Action
         id: validate-dag-deploy-action
@@ -402,9 +509,9 @@ jobs:
         with:
           expected_status_code: 404
           deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
-          organization_id: ${{ secrets.ORGANIZATION_ID }}
-          astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
-          astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
   delete-test-deployments:
     name: Delete Deployment
@@ -423,11 +530,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
       - name: Install Astro CLI and set context
         run: |
           curl -sSL https://install.astronomer.io | sudo bash -s
-          astro context switch ${{ secrets.ASTRONOMER_HOST }}
-          astro workspace switch ${{ secrets.WORKSPACE_ID }}
+          astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
       - name: Delete Deployment
         run: |
