@@ -28,7 +28,7 @@ inputs:
   image-name:
     required: false
     default: no-custom-image
-    description: "Specify a custom built image to deploy to an Asto Deployment."
+    description: "Specify a custom built image to deploy to an Asto Deployment.  To be used with 'deploy-type' set to 'image-and-dags' or 'infer'"
   action:
     required: false
     default: deploy
@@ -82,7 +82,7 @@ inputs:
   deploy-type:
     required: false
     default: "infer"
-    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', or 'dbt'."
+    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', or 'dbt'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files."
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
@@ -129,7 +129,7 @@ runs:
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
         if [[ "${{ inputs.deploy-type }}" == "dbt" && $CLI_VERSION != "" ]]; then
           REQUIRED_VERSION="1.28.1"
-          CURRENT_VERSION=$(astro --version | awk '{print $3}')
+          CURRENT_VERSION=$(astro version | awk '{print $4}')
           if [[ $CURRENT_VERSION =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
             CURRENT_MAJOR=${BASH_REMATCH[1]}
             CURRENT_MINOR=${BASH_REMATCH[2]}
@@ -348,8 +348,13 @@ runs:
         echo "Files changed: $files"
         dbt_deploy=0
 
+        root_folder="${{ inputs.root-folder }}"
+        if [[ $root_folder == "./" ]]; then
+          root_folder=""
+        fi
+
         for file in $files; do
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
+          if [[ $file =~ ^"$root_folder".* ]]; then
             echo $file is part of configured root folder, so would be triggering a dbt deploy
             dbt_deploy=1
           fi
@@ -374,7 +379,7 @@ runs:
       shell: bash
       id: dbt-deploy-options
     - name: Get Deploy Type
-      if: ${{ inputs.deploy-type == 'infer' }}
+      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' }}
       run: |
 
         # infer based on files changed to deploy only dags or image and dags
@@ -389,12 +394,19 @@ runs:
 
         skip_deploy=1
 
+        # This is to ensure that the we are backward compatible for the case when
+        # the git repo only contains astro project and root-folder is not set in the GHA
+        root_folder="${{ inputs.root-folder }}"
+        if [[ $root_folder == "./" ]]; then
+          root_folder=""
+        fi
+
         # This for loop checks for following cases:
         # 1. If no file is part of the input root folder, then it skips deploy
         # 2. If any file is not part of the dags folder, then it triggers a full image build
         # 3. If all files are part of the dags folder and input root folder, then it triggers a DAG-only deploy
         for file in $files; do
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
+          if [[ $file =~ ^"$root_folder".* ]]; then
             echo $file is part of the input root folder
             skip_deploy=0
             if [[ $file != *"dags/"* ]]; then
@@ -447,7 +459,7 @@ runs:
         fi
 
         # add custom image option
-        if [[ ${{ inputs.image-name }} != no-custom-image ]]; then
+        if [[ ${{ inputs.image-name }} != no-custom-image && inputs.deploy-type != "dags-only" ]]; then
           options="$options --image-name ${{ inputs.image-name }}"
         fi
 
@@ -504,7 +516,7 @@ runs:
         echo ::endgroup::
       shell: bash
     - name: DAG Deploy to Astro
-      if: ${{ inputs.deploy-type == 'dags-only' || (inputs.deploy-type == 'infer' && steps.deployment-type.outputs.DAGS_ONLY == '1') }}
+      if: ${{ (inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'infer') && steps.deployment-type.outputs.DAGS_ONLY == '1' }}
       run: |
 
         echo ::group::DAG Deploy to Astro

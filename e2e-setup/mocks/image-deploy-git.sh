@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# hack to mock git commands as part of action.yaml so that we could simulate dags only deploy scenario without making any additional commits
+# hack to mock git commands as part of action.yaml so that we could simulate image deploy scenario without making any additional commits
 
 # Check if the script was invoked with "git diff"
 if [[ "$1" == "diff" ]]; then
-  echo "e2e-setup/astro-project/dags/exampledag.py"
+  echo "e2e-setup/astro-project/Dockerfile"
 elif [[ "$1" == "fetch" ]]; then
   echo "Handling git fetch, doing nothing"
 else

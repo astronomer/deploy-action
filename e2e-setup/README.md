@@ -6,17 +6,26 @@ The E2E tests could be triggered automatically when a new commit is pushed to ma
 
 ## Folder Structure
 
+```
 e2e-setup/
 ├── astro-project/
 ├── deployment-templates/
-│ ├── deployment-hibernate.yaml
-│ └── deployment.yaml
+│   ├── deployment-hibernate.yaml
+│   └── deployment.yaml
 ├── mocks/
-│ └── git.sh
+│   ├── dag-deploy-git.sh
+│   └── dbt-deploy-git.sh
+├── dbt/
+│   └── dbt_project.yml
+```
 
 ### astro-project
 
 Astro project folder contains a basic airflow project initialized via Astro CLI, which will deployed as part of tests via deploy action
+
+### dbt
+
+The dbt folder contains a basic sample dbt_project.yml file, which is used to define the configuration of a dbt project. This file includes settings such as the project name, version, and other configurations necessary for running dbt commands.
 
 ### deployment-templates
 
