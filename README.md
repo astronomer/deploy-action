@@ -48,11 +48,11 @@ The following table lists the configuration options for the Deploy to Astro acti
 
 | Name | Default | Description |
 | ---|---|--- |
-| `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. Don't sepcify anything if you are deploying to a regular deployment. |
+| `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `create-deployment-preview`, `delete-deployment-preview`, `deploy-deployment-preview` or `dbt-deploy`. |
 | `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too. |
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
-| `root-folder` | `.` | Specifies the path to the Astro project directory that contains the `dags` folder. |
+| `root-folder` | `.` | Path to the Astro project, or dbt project for dbt deploys. |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro. Note that when an image deploy is performed (i.e. `astro deploy`), parsing is also executed by default. Parsing is _not_ performed automatically for DAG-only deploys (i.e. `astro deploy --dags`). |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`.|
@@ -63,6 +63,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action. Your custom checkout step needs to have `fetch-depth` of `0` and `ref` equal to `${{ github.event.after }}` so all the commits in the PR are checked out. Look at the checkout step that runs within this action for reference. |
 | `deploy-image` | `false` | If true image and DAGs will deploy for any action that deploys code. |
 | `build-secrets` | `` | Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'. |
+| `mount-path` | `` | Path to mount dbt project in Airflow, for reference by DAGs. Default /usr/local/airflow/dbt/{dbt project name} |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 
 
@@ -97,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.4
+      uses: astronomer/deploy-action@v0.6
       with:
         deployment-id: <deployment id>
         parse: true
@@ -112,7 +113,7 @@ In the following example, the folder `/example-dags/` is specified as the root f
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.4
+  uses: astronomer/deploy-action@v0.6
   with:
     deployment-id: <deployment id>
     root-folder: /example-dags/
@@ -125,7 +126,7 @@ In the following example, the pytest located at `/tests/test-tags.py` runs befor
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.4
+  uses: astronomer/deploy-action@v0.6
   with:
     deployment-id: <deployment id>
     pytest: true
@@ -139,7 +140,7 @@ In the following example, `force` is enabled and both the DAG parse and pytest p
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.4
+  uses: astronomer/deploy-action@v0.6
   with:
     deployment-id: <deployment id>
     force: true
@@ -182,11 +183,45 @@ jobs:
         build-args: |
           <your-build-arguments>
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.4
+      uses: astronomer/deploy-action@v0.6
       with:
         deployment-id: <deployment id>
         image-name: ${{ steps.image_tag.outputs.image_tag }}
 
+```
+
+### Deploy a DBT project
+
+In the following example we would be deploying the dbt project located at `dbt` folder in the Github repo
+
+```yaml
+steps:
+- name: DBT Deploy to Astro
+  uses: astronomer/deploy-action@v0.6
+  with:
+    deployment-id: <deployment id>
+    action: dbt-deploy
+    root-folder: dbt
+```
+
+### Deploy DAGs anad DBT project from same repo
+
+In the following example we would setup a workflow to deploy dags/images located at `astro-project` and dbt deploy from dbt project located at `dbt` folder in the same Github repo
+
+```yaml
+steps:
+- name: DBT Deploy to Astro
+  uses: astronomer/deploy-action@v0.6
+  with:
+    deployment-id: <deployment id>
+    root-folder: dbt
+- name: DAGs/Image Deploy to Astro
+  uses: astronomer/deploy-action@v0.6
+  with:
+    deployment-id: <deployment id>
+    action: deploy
+    root-folder: astro-project/
+    parse: true
 ```
 
 ## Deployment Preview Templates
@@ -217,7 +252,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.4
+      uses: astronomer/deploy-action@v0.6
       with:
         action: create-deployment-preview
         deployment-id: <orginal deployment id>
@@ -242,10 +277,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.4
+      uses: astronomer/deploy-action@v0.6
       with:
         action: deploy-deployment-preview
         deployment-id: <orginal deployment id>
+```
+
+## DBT Deploy to Deployment Preview
+
+```yaml
+name: Astronomer - DBT Deploy code to Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  ## Sets Deployment API key credentials as environment variables
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deploy to Deployment Preview
+      uses: astronomer/deploy-action@v0.6
+      with:
+        action: dbt-deploy-deployment-preview
+        deployment-id: <orginal deployment id>
+        root-folder: dbt
 ```
 
 ## Delete Deployment Preview
@@ -266,8 +327,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.4
+    - name: Delete Deployment Preview
+      uses: astronomer/deploy-action@v0.6
       with:
         action: delete-deployment-preview
         deployment-id: <orginal deployment id>
@@ -292,7 +353,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.4
+      uses: astronomer/deploy-action@v0.6
       with:
         deployment-id: <orginal deployment id>
 ```

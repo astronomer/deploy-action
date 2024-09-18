@@ -1,0 +1,55 @@
+name: Get Deployment Bundle Info
+description: Get deployment bundle info from Astronomer API
+inputs:
+  deployment_id:
+    description: The deployment ID
+    required: true
+  organization_id:
+    description: The organization ID
+    required: true
+  astro_api_token:
+    description: The Astronomer API token
+    required: true
+  astronomer_host:
+    description: The Astronomer host
+    required: true
+  search_term:
+    description: The search term
+    required: true
+  expected_status_code:
+    description: The expected status code
+    default: 200
+
+outputs:
+  desired_bundle_version:
+    description: The desired bundle version
+    value: ${{ steps.get-deployment-info.outputs.desired_bundle_version }}
+  bundle_type:
+    description: The bundle type
+    value: ${{ steps.get-deployment-info.outputs.bundle_type }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get Deployment Info
+      id: get-deployment-info
+      shell: bash
+      run: |
+        STATUS_CODE=$(curl -s -w "%{http_code}" -o response.json -H "Authorization: Bearer ${{ inputs.astro_api_token }}" "https://api.${{ inputs.astronomer_host }}/v1alpha1/organizations/${{ inputs.organization_id }}/deployments/${{ inputs.deployment_id }}/deploys?search=${{ inputs.search_term }}")
+        cat response.json
+        if [[ $STATUS_CODE -ne ${{ inputs.expected_status_code }} ]]; then
+          echo "Failed to get expected status code from GET Deployment API. Status code: $STATUS_CODE"
+          exit 1
+        fi
+        if [[ $(cat response.json | jq -r '.deploys | length') -eq 0 ]]; then
+          echo "No deploys found for search term: ${{ inputs.search_term }}"
+          exit 1
+        fi
+        if [[ $(cat response.json | jq -r '.deploys[0].type') != "BUNDLE" ]]; then
+          echo "No deploy of type bundle found: ${{ inputs.search_term }}"
+          exit 1
+        fi
+        desired_bundle_version=$(cat response.json | jq -r '.deploys[0].bundles[0].desiredVersion')
+        bundle_type=$(cat response.json | jq -r '.deploys[0].bundles[0].bundleType')
+        echo "desired_bundle_version=$desired_bundle_version" >> $GITHUB_OUTPUT
+        echo "bundle_type=$bundle_type" >> $GITHUB_OUTPUT

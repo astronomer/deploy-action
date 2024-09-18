@@ -1,0 +1,27 @@
+deployment:
+  configuration:
+    name: deploy-action-non-dev-e2e
+    description: ""
+    runtime_version: 12.1.0
+    dag_deploy_enabled: true
+    ci_cd_enforcement: false
+    scheduler_size: SMALL
+    is_high_availability: false
+    is_development_mode: false
+    executor: CELERY
+    scheduler_count: 1
+    workspace_name: Deploy Action E2E
+    deployment_type: STANDARD
+    cloud_provider: AWS
+    region: us-east-1
+    default_task_pod_cpu: "0.25"
+    default_task_pod_memory: 0.5Gi
+    resource_quota_cpu: "10"
+    resource_quota_memory: 20Gi
+    workload_identity: ""
+  worker_queues:
+    - name: default
+      max_worker_count: 10
+      min_worker_count: 0
+      worker_concurrency: 5
+      worker_type: A5
