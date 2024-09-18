@@ -1,0 +1,74 @@
+name: Get Astro Environment Info
+description: Get information about the Astro environment
+inputs:
+  input_workspace_id:
+    description: The workspace ID specified via user input
+    required: true
+  secret_workspace_id:
+    description: The workspace ID via pre configured secret
+    required: true
+  input_organization_id:
+    description: The organization ID specified via user input
+    required: true
+  secret_organization_id:
+    description: The organization ID via pre configured secret
+    required: true
+  input_astro_api_token:
+    description: The Astronomer API token specified via user input
+    required: true
+  secret_astro_api_token:
+    description: The Astronomer API token via pre configured secret
+    required: true
+  input_astronomer_host:
+    description: The Astronomer host specified via user input
+    required: true
+  secret_astronomer_host:
+    description: The Astronomer host via pre configured secret
+    required: true
+
+outputs:
+  organization_id:
+    value: ${{ steps.get-info.outputs.ORGANIZATION_ID }}
+  workspace_id:
+    value: ${{ steps.get-info.outputs.WORKSPACE_ID }}
+  astronomer_host:
+    value: ${{ steps.get-info.outputs.ASTRONOMER_HOST }}
+  astro_api_token:
+    value: ${{ steps.get-info.outputs.ASTRO_API_TOKEN }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get info from inputs or secrets
+      shell: bash
+      id: get-info
+      run: |
+        if [ "${{ inputs.input_workspace_id }}" != "" ]; then
+          echo "Using provided workspace_id"
+          echo "WORKSPACE_ID=${{ inputs.input_workspace_id }}" >> $GITHUB_OUTPUT
+        else
+          echo "WORKSPACE_ID=${{ inputs.secret_workspace_id }}" >> $GITHUB_OUTPUT
+        fi
+
+        if [ "${{ inputs.input_organization_id }}" != "" ]; then
+          echo "Using provided org_id"
+          echo "ORGANIZATION_ID=${{ inputs.input_organization_id }}" >> $GITHUB_OUTPUT
+        else
+          echo "ORGANIZATION_ID=${{ inputs.secret_organization_id }}" >> $GITHUB_OUTPUT
+        fi
+
+        if [ "${{ inputs.input_astronomer_host }}" != "" ]; then
+          echo "Using provided astronomer_host"
+          echo "ASTRONOMER_HOST=${{ inputs.input_astronomer_host }}" >> $GITHUB_OUTPUT
+        else
+          echo "ASTRONOMER_HOST=${{ inputs.secret_astronomer_host }}" >> $GITHUB_OUTPUT
+        fi
+
+        if [ "${{ inputs.input_astro_api_token }}" != "" ]; then
+          echo "Using provided token"
+          echo "ASTRO_API_TOKEN=${{ inputs.input_astro_api_token }}" >> $GITHUB_OUTPUT
+          echo "ASTRO_API_TOKEN=${{ inputs.input_astro_api_token }}" >> $GITHUB_ENV
+        else
+          echo "ASTRO_API_TOKEN=${{ inputs.secret_astro_api_token }}" >> $GITHUB_OUTPUT
+          echo "ASTRO_API_TOKEN=${{ inputs.secret_astro_api_token }}" >> $GITHUB_ENV
+        fi

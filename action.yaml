@@ -163,6 +163,8 @@ runs:
           # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
 
+          # TODO: we need to add wait for deployment to be created, otherwise operation to copy airflow resources like connection is flaky if webserver is not up by then
+
           # Get final Deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
 
@@ -361,6 +363,8 @@ runs:
           else
             echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
           fi
+        else
+          echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
         fi
       shell: bash
       id: development-mode
