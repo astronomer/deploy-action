@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - dbt-deploy
   workflow_dispatch:
     inputs:
       workspace_id:
