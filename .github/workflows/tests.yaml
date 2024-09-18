@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dbt-deploy
+      - e2e-tests
   workflow_dispatch:
     inputs:
       workspace_id:
