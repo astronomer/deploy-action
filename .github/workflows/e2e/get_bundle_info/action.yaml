@@ -13,9 +13,6 @@ inputs:
   astronomer_host:
     description: The Astronomer host
     required: true
-  search_term:
-    description: The search term
-    required: true
   expected_status_code:
     description: The expected status code
     default: 200
@@ -27,6 +24,9 @@ outputs:
   bundle_type:
     description: The bundle type
     value: ${{ steps.get-deployment-info.outputs.bundle_type }}
+  updated_at:
+    description: The timestamp at which the bundle was last updated
+    value: ${{ steps.get-deployment-info.outputs.updated_at }}
 
 runs:
   using: "composite"
@@ -35,21 +35,23 @@ runs:
       id: get-deployment-info
       shell: bash
       run: |
-        STATUS_CODE=$(curl -s -w "%{http_code}" -o response.json -H "Authorization: Bearer ${{ inputs.astro_api_token }}" "https://api.${{ inputs.astronomer_host }}/v1alpha1/organizations/${{ inputs.organization_id }}/deployments/${{ inputs.deployment_id }}/deploys?search=${{ inputs.search_term }}")
-        cat response.json
+        STATUS_CODE=$(curl -s -w "%{http_code}" -o response.json -H "Authorization: Bearer ${{ inputs.astro_api_token }}" "https://api.${{ inputs.astronomer_host }}/v1alpha1/organizations/${{ inputs.organization_id }}/deployments/${{ inputs.deployment_id }}/deploys")
         if [[ $STATUS_CODE -ne ${{ inputs.expected_status_code }} ]]; then
           echo "Failed to get expected status code from GET Deployment API. Status code: $STATUS_CODE"
           exit 1
         fi
         if [[ $(cat response.json | jq -r '.deploys | length') -eq 0 ]]; then
-          echo "No deploys found for search term: ${{ inputs.search_term }}"
+          echo "No deploys found for the deployment: ${{ inputs.deployment_id }}"
           exit 1
         fi
-        if [[ $(cat response.json | jq -r '.deploys[0].type') != "BUNDLE" ]]; then
-          echo "No deploy of type bundle found: ${{ inputs.search_term }}"
-          exit 1
-        fi
-        desired_bundle_version=$(cat response.json | jq -r '.deploys[0].bundles[0].desiredVersion')
-        bundle_type=$(cat response.json | jq -r '.deploys[0].bundles[0].bundleType')
+
+        # sort by updatedAt to fetch the latest deploy object
+        cat response.json | jq '.deploys | sort_by(.updatedAt)' > response_sorted.json
+
+        desired_bundle_version=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .bundles[0].desiredVersion' | head -n 1)
+        bundle_type=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .bundles[0].bundleType' | head -n 1)
+        updated_at=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .updatedAt' | head -n 1)
+
         echo "desired_bundle_version=$desired_bundle_version" >> $GITHUB_OUTPUT
         echo "bundle_type=$bundle_type" >> $GITHUB_OUTPUT
+        echo "updated_at=$updated_at" >> $GITHUB_OUTPUT

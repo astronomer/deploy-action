@@ -7,7 +7,7 @@ branding:
 inputs:
   root-folder:
     required: false
-    default: ./
+    default: ""
     description: "Path to the Astro project, or dbt project for dbt deploys."
   parse:
     required: false
@@ -128,18 +128,14 @@ runs:
 
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
         if [[ "${{ inputs.deploy-type }}" == "dbt" && $CLI_VERSION != "" ]]; then
+          #install semver to compare versions
+          npm install -g semver
+
           REQUIRED_VERSION="1.28.1"
           CURRENT_VERSION=$(astro version | awk '{print $4}')
-          if [[ $CURRENT_VERSION =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-            CURRENT_MAJOR=${BASH_REMATCH[1]}
-            CURRENT_MINOR=${BASH_REMATCH[2]}
-            CURRENT_PATCH=${BASH_REMATCH[3]}
-            if [[ $CURRENT_MAJOR -lt 1 || ($CURRENT_MAJOR -eq 1 && $CURRENT_MINOR -lt 28) || ($CURRENT_MAJOR -eq 1 && $CURRENT_MINOR -eq 28 && $CURRENT_PATCH -lt 1) ]]; then
-              echo "DBT Deploy requires Astro CLI version $REQUIRED_VERSION or higher"
-              exit 1
-            fi
-          else
-            echo "Failed to parse Astro CLI version, assuming CLI version to be capable for DBT Deploy"
+          if ! semver -r ">${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
+            echo "DBT Deploy requires Astro CLI version $REQUIRED_VERSION or higher"
+            exit 1
           fi
         fi
 
@@ -161,12 +157,16 @@ runs:
         fi
         echo ::endgroup::
       shell: bash
-    - name: Deployment Preview action
+    - name: Determine Deploy Deployment
       run: |
 
-        echo ::group::Deployment Preview action
-        # set action
-        ACTION=nothing
+        echo ::group::Determine Deploy Deployment
+
+        # validate action input
+        if [[ ${{ inputs.action }} != create-deployment-preview && ${{ inputs.action }} != delete-deployment-preview && ${{ inputs.action }} != deploy-deployment-preview && ${{ inputs.action }} != deploy ]]; then
+          echo ERROR: you specified an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
+          exit 1 # terminate and indicate error
+        fi
 
         # Select workspace if specified
         if [[ "${{ inputs.workspace }}" != "" ]]; then
@@ -226,15 +226,6 @@ runs:
 
           # Get original Deployment ID
           echo "ORIGINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-
-          # don't skip deploy
-          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
-
-          # image deploy only
-          echo "IMAGE_DEPLOY_ONLY=true" >> $GITHUB_OUTPUT
-
-          # set action
-          ACTION=create
         fi
 
         # delete deployment preview and skip deploy if action is delete-deployment-preview
@@ -255,15 +246,6 @@ runs:
           fi
           # delete branch deployment
           astro deployment delete -n $BRANCH_DEPLOYMENT_NAME -f
-
-          # skip deploy
-          echo "SKIP_DEPLOY=true" >> $GITHUB_OUTPUT
-
-          # not image deploy only
-          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
-
-          # set action
-          ACTION=delete
         fi
 
         # # deploy to deployment preview if action is deploy-deployment-preview
@@ -291,35 +273,13 @@ runs:
 
           # Get Deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
-
-          # don't skip deploy
-          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
-
-          # not image deploy only
-          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
-
-          # set action
-          ACTION=deploy-preview
         fi
 
         # if action is deploy or dbt deploy simply set final Deployment id to Deployment id to streamline the deployment id reference in rest of the workflow
         if [[ ${{ inputs.action }} == deploy ]]; then
           echo "FINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-
-          # don't skip deploy
-          echo "SKIP_DEPLOY=false" >> $GITHUB_OUTPUT
-
-          # not image deploy only
-          echo "IMAGE_DEPLOY_ONLY=false" >> $GITHUB_OUTPUT
-
-          # set action
-          ACTION=${{ inputs.action }}
         fi
 
-        if [[ $ACTION == nothing ]]; then
-          echo ERROR: you specified an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
-          exit 1 # terminate and indicate error
-        fi
         echo ::endgroup::
       shell: bash
       id: deployment-preview
@@ -327,7 +287,7 @@ runs:
       run: |
 
         echo ::group::Determine if DAG Deploy is enabled
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false && ${{steps.deployment-preview.outputs.IMAGE_DEPLOY_ONLY}} == false ]]; then
+        if [[ ${{ inputs.action }} != create-deployment-preview && ${{ inputs.action }} != delete-deployment-preview ]]; then
           echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
         else
           echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
@@ -346,17 +306,12 @@ runs:
         git fetch origin $branch
         files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
         echo "Files changed: $files"
-        dbt_deploy=0
-
-        root_folder="${{ inputs.root-folder }}"
-        if [[ $root_folder == "./" ]]; then
-          root_folder=""
-        fi
+        DBT_DEPLOY=false
 
         for file in $files; do
-          if [[ $file =~ ^"$root_folder".* ]]; then
+          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
             echo $file is part of configured root folder, so would be triggering a dbt deploy
-            dbt_deploy=1
+            DBT_DEPLOY=true
           fi
         done
 
@@ -373,45 +328,38 @@ runs:
           fi
         fi
 
-        echo "DBT_DEPLOY=$dbt_deploy" >> $GITHUB_OUTPUT
+        echo "DBT_DEPLOY=$DBT_DEPLOY" >> $GITHUB_OUTPUT
         echo "DBT_OPTIONS=$options" >> $GITHUB_OUTPUT
         echo ::endgroup::
       shell: bash
       id: dbt-deploy-options
     - name: Get Deploy Type
-      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' }}
+      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' }}
       run: |
 
         # infer based on files changed to deploy only dags or image and dags
-        echo ::group::Get Deployment Type
+        echo ::group::Get Deploy Type
         cd ${{ inputs.root-folder }}
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
         files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
         echo "files changed: $files"
-        dags_only=1
+        DAGS_ONLY_DEPLOY=false
 
-        skip_deploy=1
-
-        # This is to ensure that the we are backward compatible for the case when
-        # the git repo only contains astro project and root-folder is not set in the GHA
-        root_folder="${{ inputs.root-folder }}"
-        if [[ $root_folder == "./" ]]; then
-          root_folder=""
-        fi
+        SKIP_IMAGE_OR_DAGS_DEPLOY=true
 
         # This for loop checks for following cases:
         # 1. If no file is part of the input root folder, then it skips deploy
         # 2. If any file is not part of the dags folder, then it triggers a full image build
         # 3. If all files are part of the dags folder and input root folder, then it triggers a DAG-only deploy
         for file in $files; do
-          if [[ $file =~ ^"$root_folder".* ]]; then
+          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
             echo $file is part of the input root folder
-            skip_deploy=0
-            if [[ $file != *"dags/"* ]]; then
-              echo $file is not a DAG, triggering a full image build
-              dags_only=0
+            SKIP_IMAGE_OR_DAGS_DEPLOY=false
+            if [[ $file == *"dags/"* && ${{ inputs.deploy-type }} != 'image-and-dags' ]]; then
+              echo $file is part of dags folder, triggering a DAG-only deploy
+              DAGS_ONLY_DEPLOY=true
               break
             fi
           fi
@@ -421,25 +369,28 @@ runs:
         # 1. When there is no change in the input root folder we should skip deploy, but not when it's deployment preview create action
         # 2. When user has passed a custom image then we would need to deploy the image
         # 3. When the action is deployment preview delete, then we should skip any form of deploy
-        if [[ $skip_deploy == 1 ]]; then
+        if [[ $SKIP_IMAGE_OR_DAGS_DEPLOY == true ]]; then
           # skip all deploy steps
-          dags_only=2
+          DAGS_ONLY_DEPLOY=false
         fi
 
         # check if user has passed a custom image or the action has created a new deployment preview, then we would need to deploy the image
-        if [[ ${{ inputs.image-name }} != "no-custom-image" || ${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }} == false || ${{ steps.deployment-preview.outputs.IMAGE_DEPLOY_ONLY }} == true ]]; then
-          dags_only=0
+        if [[ ${{ inputs.image-name }} != "no-custom-image" || ${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }} == false || ${{ inputs.action }} == create-deployment-preview ]]; then
+          SKIP_IMAGE_OR_DAGS_DEPLOY=false
+          DAGS_ONLY_DEPLOY=false
         fi
 
-        if [[ ${{ steps.deployment-preview.outputs.SKIP_DEPLOY }} == true ]]; then
+        if [[ ${{ inputs.action }} == delete-deployment-preview ]]; then
           # skip all deploy steps
-          dags_only=2
+          SKIP_IMAGE_OR_DAGS_DEPLOY=true
+          DAGS_ONLY_DEPLOY=false
         fi
 
-        echo "DAGS_ONLY=$dags_only" >> $GITHUB_OUTPUT
+        echo "DAGS_ONLY_DEPLOY=$DAGS_ONLY_DEPLOY" >> $GITHUB_OUTPUT
+        echo "SKIP_IMAGE_OR_DAGS_DEPLOY=$SKIP_IMAGE_OR_DAGS_DEPLOY" >> $GITHUB_OUTPUT
         echo ::endgroup::
       shell: bash
-      id: deployment-type
+      id: deploy-type
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: Setup image or dags deploy options
       if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' }}
@@ -486,7 +437,7 @@ runs:
       run: |
 
         echo ::group::Determine if Development Mode is enabled
-        if [[ ${{steps.deployment-preview.outputs.SKIP_DEPLOY}} == false ]]; then
+        if [[ ${{ inputs.action }} != delete-deployment-preview ]]; then
           DEPLOYMENT_TYPE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.deployment_type)
           # only inspect development mode if deployment is not hybrid
           if [[ $DEPLOYMENT_TYPE != "HYBRID" ]]; then
@@ -507,7 +458,7 @@ runs:
       shell: bash
       id: development-mode
     - name: Override to wake up the Deployment
-      if: ${{ steps.deployment-preview.outputs.SKIP_DEPLOY == 'false' && steps.development-mode.outputs.DEVELOPMENT_MODE == 'true' }}
+      if: ${{ inputs.action != 'delete-deployment-preview' && steps.development-mode.outputs.DEVELOPMENT_MODE == 'true' }}
       run: |
         echo ::group::Override to wake up the Deployment
         astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --force
@@ -516,7 +467,7 @@ runs:
         echo ::endgroup::
       shell: bash
     - name: DAG Deploy to Astro
-      if: ${{ (inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'infer') && steps.deployment-type.outputs.DAGS_ONLY == '1' }}
+      if: ${{ (inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'infer') && steps.deploy-type.outputs.DAGS_ONLY_DEPLOY == 'true' }}
       run: |
 
         echo ::group::DAG Deploy to Astro
@@ -527,7 +478,7 @@ runs:
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
-      if: ${{ inputs.deploy-type == 'image-and-dags' || inputs.deploy-image == true || ( inputs.deploy-type == 'infer' && steps.deployment-type.outputs.DAGS_ONLY == '0') }}
+      if: ${{ inputs.deploy-image == true || ( (inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'infer') && steps.deploy-type.outputs.DAGS_ONLY_DEPLOY == 'false' && steps.deploy-type.outputs.SKIP_IMAGE_OR_DAGS_DEPLOY == 'false' ) }}
       run: |
         echo ::group::Image and DAG Deploy to Astro
         # Deploy image and DAGs
@@ -536,7 +487,7 @@ runs:
         echo ::endgroup::
       shell: bash
     - name: DBT Deploy to Astro
-      if: ${{ steps.dbt-deploy-options.outputs.DBT_DEPLOY == 1 && inputs.deploy-type == 'dbt' }}
+      if: ${{ inputs.deploy-type == 'dbt' && steps.dbt-deploy-options.outputs.DBT_DEPLOY == 'true' }}
       run: |
 
         echo ::group::DBT Deploy to Astro
@@ -561,7 +512,7 @@ runs:
         echo ::endgroup::
       shell: bash
     - name: Remove override on Deployment to resume schedule
-      if: ${{ steps.deployment-preview.outputs.SKIP_DEPLOY == 'false' && steps.development-mode.outputs.DEVELOPMENT_MODE == 'true' }}
+      if: ${{ steps.development-mode.outputs.DEVELOPMENT_MODE == 'true' }}
       run: |
 
         echo ::group::Remove override on Deployment to resume schedule
