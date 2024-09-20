@@ -266,8 +266,8 @@ jobs:
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
 
-  infer-image-deploy:
-    name: Infer Image Deploy Test
+  infer-deploy:
+    name: Infer Deploy Test
     runs-on: ubuntu-latest
     needs: [pytests-test, create-test-deployments]
     strategy:
