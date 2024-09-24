@@ -667,7 +667,7 @@ jobs:
         uses: ./.github/workflows/e2e/validate_deployment
         with:
           dag_tarball_version_before: ""
-          image_version_before: "12.1.0"
+          image_version_before: "12.1.1"
           dag_tarball_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_image_version }}
 
