@@ -5,6 +5,9 @@ inputs:
   is_dag_only_deploy:
     description: Whether the deploy operation was DAG-only
     default: false
+  is_no_deploy:
+    description: If the deploy test was a no-op
+    default: false
   dag_tarball_version_before:
     description: The desired DAG tarball version before the test
     required: true
@@ -25,6 +28,15 @@ runs:
       id: validate-deployment
       shell: bash
       run: |
+
+        if [[ "${{ inputs.is_no_deploy }}" == "true" ]]; then
+          if [[ "${{ inputs.dag_tarball_version_before }}" == "${{ inputs.dag_tarball_version_after }}" && "${{ inputs.image_version_before }}" == "${{ inputs.image_version_after }}" ]]; then
+            echo "Deploy Action validation succeeded: no deploy operation"
+            exit 0
+          fi
+          echo "Deploy Action validation failed: deploy operation was not a no-op"
+          exit 1
+        fi
 
         # If it's dag only deploy then validate that only desiredDagTarballVersion was updated
         if [[ "${{ inputs.is_dag_only_deploy }}" == "true" ]]; then

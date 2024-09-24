@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - e2e-tests
   workflow_dispatch:
     inputs:
       workspace_id:
@@ -137,7 +136,7 @@ jobs:
 
       - name: Mock git commands
         run: |
-          mv e2e-setup/mocks/git.sh /usr/local/bin/git
+          mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
 
       - name: Install dependencies
@@ -224,6 +223,13 @@ jobs:
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
+      - name: Mock git commands for DAG Deploy
+        run: |
+
+          # set to dag deploy git mock, with deploy-type set to image-and-dags to test that it will do a image deploy
+          mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
       - name: Get Deployment Info Before Test
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
@@ -239,7 +245,8 @@ jobs:
           deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           pytest: true
-          deploy-image: true
+          action: deploy
+          deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
 
       - name: Get Deployment Info After Test
@@ -259,10 +266,201 @@ jobs:
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
 
+  infer-deploy:
+    name: Infer Deploy Test
+    runs-on: ubuntu-latest
+    needs: [pytests-test, create-test-deployments]
+    strategy:
+      max-parallel: 1
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
+        deploy_type: [dags, image-and-dags]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Mock git commands
+        run: |
+
+          # if deploy_type is dags, then use dags-deploy-git.sh as mock otherwise use image-deploy-git.sh as mock
+          if [[ "${{ matrix.deploy_type }}" == "dags" ]]; then
+            mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
+          else
+            mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
+          fi
+          chmod +x /usr/local/bin/git
+
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Run Deploy Action
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          parse: true
+          action: deploy
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_dag_only_deploy: ${{ matrix.deploy_type == 'dags' }}
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+
+  no-deploy-test:
+    name: No Deploy Test
+    runs-on: ubuntu-latest
+    needs: [infer-image-deploy, create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
+        deploy_type: [infer, dbt, dags, image-and-dags]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Setup dependencies
+        run: |
+
+          sudo apt-get install jq
+
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        if: ${{ matrix.deploy_type != 'dbt' }}
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Run Deploy Action
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          action: deploy
+          deploy-type: ${{ matrix.deploy_type }}
+          root-folder: ${{ matrix.deploy_type == 'dbt' && 'e2e-setup/dbt' || 'e2e-setup/astro-project' }}
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        if: ${{ matrix.deploy_type != 'dbt' }}
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate no image or dag deploy happened
+        if: ${{ matrix.deploy_type != 'dbt' }}
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_no_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+
+      - name: Get DBT bundle info
+        id: get-dbt-bundle-info
+        if: ${{ matrix.deploy_type == 'dbt' }}
+        uses: ./.github/workflows/e2e/get_bundle_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate no DBT deploy happened
+        id: validate-dbt-deploy-action
+        if: ${{ matrix.deploy_type == 'dbt' }}
+        shell: bash
+        run: |
+
+          if [[ "${{ steps.get-dbt-bundle-info.outputs.desired_bundle_version }}" != "" ]]; then
+            echo "DBT Deploy Action validation failed: DBT bundle found, but there should be no deploy"
+            exit 1
+          fi
+
+          echo "DBT Deploy Action validation succeeded: DBT bundle not found"
+          exit 0
+
   custom-docker-image-test:
     name: Custom Docker Image Test
     runs-on: ubuntu-latest
-    needs: [pytests-test, create-test-deployments]
+    needs: [no-deploy-test, create-test-deployments]
     strategy:
       matrix:
         deployment_id:
@@ -316,7 +514,8 @@ jobs:
           deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           image-name: custom-image:latest
-          deploy-image: true
+          action: deploy
+          deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
 
       - name: Get Deployment Info After Test
@@ -335,6 +534,92 @@ jobs:
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desiredDagTarballVersion }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+
+  # DBT Deploy test would test the DAG only deploy functionality in deploy action
+  dbt-deploy-test:
+    name: DBT Deploy Test
+    runs-on: ubuntu-latest
+    needs: [custom-docker-image-test, create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/dbt-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Install dependencies
+        id: setup
+        run: |
+
+          sudo apt-get install jq
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+          test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
+          echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: DBT Deploy to Astro
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          parse: true
+          root-folder: e2e-setup/dbt
+          deploy-type: dbt
+          description: "test-dbt-deploy-action"
+
+      - name: Get DBT bundle info
+        id: get-dbt-bundle-info
+        uses: ./.github/workflows/e2e/get_bundle_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate DBT Deploy Action
+        id: validate-dbt-deploy-action
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-dbt-bundle-info.outputs.desired_bundle_version }}" == "" ]]; then
+            echo "DBT Deploy Action validation failed: DBT bundle not found"
+            exit 1
+          fi
+
+          updated_at=$(date -u -d "${{ steps.get-dbt-bundle-info.outputs.updated_at }}" +"%s.%N")
+          test_start_time=$(date -u -d "${{ steps.setup.outputs.test_start_time }}" +"%s.%N")
+          if [[ $(echo "$updated_at > $test_start_time" | bc -l) ]]; then
+            echo "DBT Deploy Action validation succeeded: DBT bundle found"
+            exit 0
+          fi
+
+          echo "DBT Deploy Action validation failed: DBT bundle was not updated"
+          exit 1
 
   # Deployment preview tests can run in parallel to above tests since it operates on a different deployment, so it won't interfere with the above tests
   deployment-preview-test:
@@ -366,13 +651,16 @@ jobs:
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
       - name: Install dependencies
-        id: install-pre-reqs
+        id: setup
         run: |
 
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
           curl -sSL https://install.astronomer.io | sudo bash -s
+
+          test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
+          echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -409,6 +697,11 @@ jobs:
           dag_tarball_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_image_version }}
 
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
       - name: Get Deployment Info Before Test
         id: get-deployment-before-deploy
         uses: ./.github/workflows/e2e/get_deployment_info
@@ -423,10 +716,10 @@ jobs:
         uses: ./
         with:
           deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
-          workspace: ${{ secrets.WORKSPACE_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: deploy-deployment-preview
+          deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
-          deploy-image: true
           preview-name: test-preview-${{ matrix.deployment_id }}
 
       - name: Get Deployment Info After Test
@@ -449,7 +742,7 @@ jobs:
 
       - name: Mock git commands for DAG Deploy
         run: |
-          mv e2e-setup/mocks/git.sh /usr/local/bin/git
+          mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
 
       - name: Get Deployment Info Before DAG Deploy Test
@@ -466,8 +759,10 @@ jobs:
         uses: ./
         with:
           deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
-          workspace: ${{ secrets.WORKSPACE_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          action: deploy-deployment-preview
           parse: true
+          deploy-type: dags-only
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
 
@@ -490,6 +785,51 @@ jobs:
           dag_tarball_version_after: ${{ steps.get-deployment-after-dag-deploy.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-dag-deploy.outputs.desired_image_version }}
 
+      - name: Mock git commands for DBT Deploy
+        run: |
+          mv e2e-setup/mocks/dbt-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: DBT Deploy to Astro
+        id: deployment-preview-dbt-deploy
+        uses: ./
+        with:
+          deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          action: deploy-deployment-preview
+          deploy-type: dbt
+          description: "test-dbt-deploy-action"
+          root-folder: e2e-setup/dbt
+          preview-name: test-preview-${{ matrix.deployment_id }}
+
+      - name: Get DBT bundle info
+        id: get-dbt-bundle-info
+        uses: ./.github/workflows/e2e/get_bundle_info
+        with:
+          deployment_id: ${{ steps.deployment-preview-dag-deploy.outputs.preview-id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate DBT Deploy Action
+        id: validate-dbt-deploy-action
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-dbt-bundle-info.outputs.desired_bundle_version }}" == "" ]]; then
+            echo "DBT Deploy Action validation failed: DBT bundle not found"
+            exit 1
+          fi
+
+          updated_at=$(date -u -d "${{ steps.get-dbt-bundle-info.outputs.updated_at }}" +"%s.%N")
+          test_start_time=$(date -u -d "${{ steps.setup.outputs.test_start_time }}" +"%s.%N")
+          if [[ $(echo "$updated_at > $test_start_time" | bc -l) ]]; then
+            echo "DBT Deploy Action validation succeeded: DBT bundle found"
+            exit 0
+          fi
+
+          echo "DBT Deploy Action validation failed: DBT bundle was not updated"
+          exit 1
+
       - name: Delete Deployment Preview
         id: delete-deployment-preview
         # ensure that we always try delete the deployment preview even if the previous steps fail
@@ -497,7 +837,7 @@ jobs:
         uses: ./
         with:
           deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
-          workspace: ${{ secrets.WORKSPACE_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: delete-deployment-preview
           preview-name: test-preview-${{ matrix.deployment_id }}
 
@@ -522,6 +862,7 @@ jobs:
         dag-deploy-test,
         pytests-test,
         custom-docker-image-test,
+        dbt-deploy-test,
         deployment-preview-test,
       ]
     # ensure that we always try delete the deployment even if any of the tests fail
