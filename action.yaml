@@ -309,7 +309,7 @@ runs:
         DBT_DEPLOY=false
 
         root_folder="${{ inputs.root-folder }}"
-        if [[ $root_folder == "./"" ]]; then
+        if [[ $root_folder == "./" ]]; then
           root_folder=""
         fi
 
@@ -355,7 +355,7 @@ runs:
         SKIP_IMAGE_OR_DAGS_DEPLOY=true
 
         root_folder="${{ inputs.root-folder }}"
-        if [[ $root_folder == "./"" ]]; then
+        if [[ $root_folder == "./" ]]; then
           root_folder=""
         fi
 
