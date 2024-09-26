@@ -375,9 +375,9 @@ jobs:
 
           # if deploy_type is dags, then use dags-deploy-git.sh as mock otherwise use image-deploy-git.sh as mock
           if [[ "${{ matrix.deploy_type }}" == "dags" ]]; then
-            mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
+            mv ../mocks/dag-deploy-git.sh /usr/local/bin/git
           else
-            mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
+            mv ../mocks/image-deploy-git.sh /usr/local/bin/git
           fi
           chmod +x /usr/local/bin/git
 
