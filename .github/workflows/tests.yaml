@@ -340,10 +340,10 @@ jobs:
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
 
-  base-root-folder:
-    name: Infer Deploy Test
+  base-root-folder-test:
+    name: Base Root Folder Test
     runs-on: ubuntu-latest
-    needs: [pytests-test, create-test-deployments]
+    needs: [infer-deploy, create-test-deployments]
     defaults:
       run:
         working-directory: e2e-setup/astro-project
@@ -430,7 +430,7 @@ jobs:
   no-deploy-test:
     name: No Deploy Test
     runs-on: ubuntu-latest
-    needs: [infer-deploy, create-test-deployments]
+    needs: [base-root-folder-test, create-test-deployments]
     strategy:
       matrix:
         deployment_id:
