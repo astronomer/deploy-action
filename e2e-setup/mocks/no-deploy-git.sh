@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# hack to mock git commands as part of action.yaml so that we could simulate no deploy scenario without making any additional commits
+
+# Check if the script was invoked with "git diff"
+if [[ "$1" == "diff" ]]; then
+   echo "README.md"
+elif [[ "$1" == "fetch" ]]; then
+  echo "Handling git fetch, doing nothing"
+else
+  echo "Error: git mock script isn't configured to handle $1" >&2
+  exit 1
+fi
