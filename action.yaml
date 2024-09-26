@@ -7,7 +7,7 @@ branding:
 inputs:
   root-folder:
     required: false
-    default: ""
+    default: "./"
     description: "Path to the Astro project, or dbt project for dbt deploys."
   parse:
     required: false
@@ -308,8 +308,13 @@ runs:
         echo "Files changed: $files"
         DBT_DEPLOY=false
 
+        root_folder="${{ inputs.root-folder }}"
+        if [[ $root_folder == "./"" ]]; then
+          root_folder=""
+        fi
+
         for file in $files; do
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
+          if [[ $file =~ ^"$root_folder".* ]]; then
             echo $file is part of configured root folder, so would be triggering a dbt deploy
             DBT_DEPLOY=true
           fi
@@ -349,12 +354,17 @@ runs:
 
         SKIP_IMAGE_OR_DAGS_DEPLOY=true
 
+        root_folder="${{ inputs.root-folder }}"
+        if [[ $root_folder == "./"" ]]; then
+          root_folder=""
+        fi
+
         # This for loop checks for following cases:
         # 1. If no file is part of the input root folder, then it skips deploy
         # 2. If any file is not part of the dags folder, then it triggers a full image build
         # 3. If all files are part of the dags folder and input root folder, then it triggers a DAG-only deploy
         for file in $files; do
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
+          if [[ $file =~ ^"$root_folder".* ]]; then
             echo $file is part of the input root folder
             SKIP_IMAGE_OR_DAGS_DEPLOY=false
             if [[ $file == *"dags/"* && ${{ inputs.deploy-type }} != 'image-and-dags' ]]; then
