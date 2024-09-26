@@ -347,10 +347,11 @@ runs:
         cd ${{ inputs.root-folder }}
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
+        pwd
         git fetch origin $branch
         files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
         echo "files changed: $files"
-        DAGS_ONLY_DEPLOY=false
+        DAGS_ONLY_DEPLOY=true
 
         SKIP_IMAGE_OR_DAGS_DEPLOY=true
 
@@ -367,9 +368,9 @@ runs:
           if [[ $file =~ ^"$root_folder".* ]]; then
             echo $file is part of the input root folder
             SKIP_IMAGE_OR_DAGS_DEPLOY=false
-            if [[ $file == *"dags/"* && ${{ inputs.deploy-type }} != 'image-and-dags' ]]; then
-              echo $file is part of dags folder, triggering a DAG-only deploy
-              DAGS_ONLY_DEPLOY=true
+            if [[ $file != *"dags/"* && ${{ inputs.deploy-type }} != 'dags-only' ]]; then
+              echo $file is not part of dags folder, triggering a image deploy
+              DAGS_ONLY_DEPLOY=false
               break
             fi
           fi
