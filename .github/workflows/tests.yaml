@@ -154,7 +154,7 @@ jobs:
             if [ "$1" = "deploy" ]; then
               # Change directory to 'e2e-setup/astro-project' and then call original `astro deploy`
               # so that we could simulate the default behavior without needing to have the astro project in base folder
-              cd e2e-setup/astro-project && command astro "$@"
+              echo "cd into astro project" && cd e2e-setup/astro-project && command astro "$@"
             else
               # If it's not a `deploy` command, run the original `astro`
               command astro "$@"
