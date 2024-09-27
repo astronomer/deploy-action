@@ -398,6 +398,9 @@ runs:
           DAGS_ONLY_DEPLOY=false
         fi
 
+        ls -l
+        pwd
+
         echo "DAGS_ONLY_DEPLOY=$DAGS_ONLY_DEPLOY" >> $GITHUB_OUTPUT
         echo "SKIP_IMAGE_OR_DAGS_DEPLOY=$SKIP_IMAGE_OR_DAGS_DEPLOY" >> $GITHUB_OUTPUT
         echo ::endgroup::

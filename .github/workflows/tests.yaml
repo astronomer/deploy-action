@@ -146,10 +146,10 @@ jobs:
           # we need to pre-install the CLI to set the context
           curl -sSL https://install.astronomer.io | sudo bash -s
 
-      - name: Setup astro project in root folder
+      - name: Setup astro project in base folder
         run: |
 
-          # copy the astro project to the root folder
+          # copy the astro project to the base folder
           cp -r e2e-setup/astro-project/ .
 
       - name: Set CLI context
