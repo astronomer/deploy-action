@@ -127,6 +127,14 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
       - name: Mock git commands
         run: |
 
@@ -137,29 +145,9 @@ jobs:
             mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
           fi
           chmod +x /usr/local/bin/git
-
-      - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
-
-      - name: Setup astro to cd before deploy
-        run: |
-
-          # Create a function that replaces `astro deploy`
-          astro() {
-            if [ "$1" = "deploy" ]; then
-              # Change directory to 'e2e-setup/astro-project' and then call original `astro deploy`
-              # so that we could simulate the default behavior without needing to have the astro project in base folder
-              echo "cd into astro project" && cd e2e-setup/astro-project && command astro "$@"
-            else
-              # If it's not a `deploy` command, run the original `astro`
-              command astro "$@"
-            fi
-          }
+          cp /usr/local/bin/astro /usr/local/bin/astro-original
+          mv e2e-setup/mocks/astro-deploy.sh /usr/local/bin/astro
+          chmod +x /usr/local/bin/astro
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
