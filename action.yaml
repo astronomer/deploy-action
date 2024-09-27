@@ -372,7 +372,6 @@ runs:
             if [[ $file != *"dags/"* ]]; then
               echo $file is not part of dags folder
               DAGS_ONLY_DEPLOY=false
-              break
             fi
           fi
         done
