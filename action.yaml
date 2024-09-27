@@ -301,7 +301,7 @@ runs:
 
         echo ::group::Get DBT Deploy Options
 
-        if [[ ${{ inputs.root-folder }} != "" ]]; then
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
           cd ${{ inputs.root-folder }}
         fi
 
@@ -344,7 +344,7 @@ runs:
         # infer based on files changed to deploy only dags or image and dags
         echo ::group::Get Deploy Type
 
-        if [[ ${{ inputs.root-folder }} != "" ]]; then
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
           cd ${{ inputs.root-folder }}
         fi
 
@@ -452,7 +452,7 @@ runs:
         echo ::group::DAG Deploy to Astro
         # Deploy only dags
 
-        if [[ ${{ inputs.root-folder }} != "" ]]; then
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
           cd ${{ inputs.root-folder }}
         fi
 
@@ -466,7 +466,7 @@ runs:
         echo ::group::Image and DAG Deploy to Astro
         # Deploy image and DAGs
 
-        if [[ ${{ inputs.root-folder }} != "" ]]; then
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
           cd ${{ inputs.root-folder }}
         fi
 
@@ -479,7 +479,7 @@ runs:
 
         echo ::group::DBT Deploy to Astro
 
-        if [[ ${{ inputs.root-folder }} != "" ]]; then
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
           cd ${{ inputs.root-folder }}
         fi
 
