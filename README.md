@@ -49,7 +49,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | Name | Default | Description |
 | ---|---|--- |
 | `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `deploy`, `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. If using `deploy` or `deploy-deployment-preview` one should also specify `deploy-type`. |
-| `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs or DBT project. Possible options are `infer`, `dags-only`, `image-and-dags` or `dbt`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. |
+| `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs or DBT project. Possible options are `infer`, `dags-only`, `image-and-dags` or `dbt`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. For description on each deploy type checkout [deploy type details](https://github.com/astronomer/deploy-action#deploy-type-details) |
 | `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too. |
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
@@ -75,6 +75,27 @@ The following table lists the outputs for the Deploy to Astro action.
 | Name | Description |
 | ---|--- |
 | `preview-id` | The ID of the created deployment preview. Only works when action=create-deployment-preview. |
+
+## Deploy Type Details
+
+The following section describe each of the deploy type input value in detail to avoid any confusion:
+1. `infer`: In this mode, deploy-action would run through all the file changes:
+  - if there are no file changes in the configured root-folder then it skips deploy
+  - if there are changes only in `dags/` folder, then it will do a dags deploy
+  - otherwise it would do a complete image deploy
+
+2. `image-and-dags`: In this mode, deploy-action would run through all the file changes:
+  - if there are no file changes in the configured root-folder then it skips deploy
+  - otherwise it would do a complete image deploy
+
+3. `dags-only`: In this mode, deploy-action would run through all the file changes:
+  - if there are no file changes in the configured root-folder then it skips deploy
+  - if all the file changes are in folders except `dags` folder then it skips deploy
+  - otherwise it would do a dag only deploy
+
+4. `dbt`: In this mode, deploy-action would run through all the file changes:
+  - if there are no file changes in the configured root-folder then it skips deploy
+  - otherwise it would do a dbt deploy
 
 
 ## Workflow file examples
