@@ -132,9 +132,9 @@ jobs:
 
           # if deploy_type is dags, then use dags-deploy-git.sh as mock otherwise use image-deploy-git.sh as mock
           if [[ "${{ matrix.deploy_type }}" == "dags" ]]; then
-            mv e2e-setup/mocks/default-dag-deploy-git.sh /usr/local/bin/git
+            mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
           else
-            mv e2e-setup/mocks/default-image-deploy-git.sh /usr/local/bin/git
+            mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
           fi
           chmod +x /usr/local/bin/git
 
@@ -146,11 +146,20 @@ jobs:
           # we need to pre-install the CLI to set the context
           curl -sSL https://install.astronomer.io | sudo bash -s
 
-      - name: Setup astro project in base folder
+      - name: Setup astro to cd before deploy
         run: |
 
-          # copy the astro project to the base folder
-          cp -r e2e-setup/astro-project/ .
+          # Create a function that replaces `astro deploy`
+          astro() {
+            if [ "$1" = "deploy" ]; then
+              # Change directory to 'e2e-setup/astro-project' and then call original `astro deploy`
+              # so that we could simulate the default behavior without needing to have the astro project in base folder
+              cd e2e-setup/astro-project && command astro "$@"
+            else
+              # If it's not a `deploy` command, run the original `astro`
+              command astro "$@"
+            fi
+          }
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
