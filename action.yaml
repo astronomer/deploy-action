@@ -300,7 +300,11 @@ runs:
       run: |
 
         echo ::group::Get DBT Deploy Options
-        cd ${{ inputs.root-folder }}
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
@@ -339,27 +343,39 @@ runs:
 
         # infer based on files changed to deploy only dags or image and dags
         echo ::group::Get Deploy Type
-        cd ${{ inputs.root-folder }}
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
         branch=$(echo "${GITHUB_REF#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
         files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
         echo "files changed: $files"
-        DAGS_ONLY_DEPLOY=false
 
+        DAGS_ONLY_DEPLOY=false
         SKIP_IMAGE_OR_DAGS_DEPLOY=true
 
-        # This for loop checks for following cases:
-        # 1. If no file is part of the input root folder, then it skips deploy
-        # 2. If any file is not part of the dags folder, then it triggers a full image build
-        # 3. If all files are part of the dags folder and input root folder, then it triggers a DAG-only deploy
         for file in $files; do
           if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
             echo $file is part of the input root folder
             SKIP_IMAGE_OR_DAGS_DEPLOY=false
-            if [[ $file == *"dags/"* && ${{ inputs.deploy-type }} != 'image-and-dags' ]]; then
-              echo $file is part of dags folder, triggering a DAG-only deploy
-              DAGS_ONLY_DEPLOY=true
+            if [[ ${{ inputs.deploy-type }} == 'infer' ]]; then
+              if [[ $file == *"dags/"* ]]; then
+                echo $file is part of dags folder
+                DAGS_ONLY_DEPLOY=true
+              else
+                DAGS_ONLY_DEPLOY=false
+                break
+              fi
+            elif [[ ${{ inputs.deploy-type }} == 'dags-only' ]]; then
+              if [[ $file == *"dags/"* ]]; then
+                echo $file is part of dags folder
+                DAGS_ONLY_DEPLOY=true
+              fi
+            elif [[ ${{ inputs.deploy-type }} == 'image-and-dags' ]]; then
+              DAGS_ONLY_DEPLOY=false
               break
             fi
           fi
@@ -439,7 +455,11 @@ runs:
 
         echo ::group::DAG Deploy to Astro
         # Deploy only dags
-        cd ${{ inputs.root-folder }}
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
         echo ::endgroup::
       shell: bash
@@ -449,7 +469,11 @@ runs:
       run: |
         echo ::group::Image and DAG Deploy to Astro
         # Deploy image and DAGs
-        cd ${{ inputs.root-folder }}
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
         astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
         echo ::endgroup::
       shell: bash
@@ -458,7 +482,11 @@ runs:
       run: |
 
         echo ::group::DBT Deploy to Astro
-        cd ${{ inputs.root-folder }}
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
         astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
         echo ::endgroup::
       shell: bash

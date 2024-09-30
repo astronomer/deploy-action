@@ -100,11 +100,96 @@ jobs:
           DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
           echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
 
+  default-deploy-tests:
+    name: Default Deploy Test
+    runs-on: ubuntu-latest
+    needs: [create-test-deployments]
+    strategy:
+      max-parallel: 1
+      matrix:
+        deployment_id:
+          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+        deploy_type: [dags, image-and-dags]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+
+          # we need to pre-install the CLI to set the context
+          curl -sSL https://install.astronomer.io | sudo bash -s
+
+      - name: Mock git commands
+        run: |
+
+          # if deploy_type is dags, then use dags-deploy-git.sh as mock otherwise use image-deploy-git.sh as mock
+          if [[ "${{ matrix.deploy_type }}" == "dags" ]]; then
+            mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
+          else
+            mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
+          fi
+          chmod +x /usr/local/bin/git
+          cp /usr/local/bin/astro /usr/local/bin/astro-original
+          mv e2e-setup/mocks/astro-deploy.sh /usr/local/bin/astro
+          chmod +x /usr/local/bin/astro
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Run Deploy Action
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_dag_only_deploy: ${{ matrix.deploy_type == 'dags' }}
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+
   # DAG Deploy test would test the DAG only deploy functionality in deploy action
   dag-deploy-test:
     name: DAG Deploy Test
     runs-on: ubuntu-latest
-    needs: [create-test-deployments]
+    needs: [default-deploy-tests, create-test-deployments]
     strategy:
       matrix:
         deployment_id:
@@ -376,6 +461,13 @@ jobs:
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Mock git commands for DAG Deploy
+        run: |
+
+          # set to no deploy git mock, to simulate no interested file change scenario
+          mv e2e-setup/mocks/no-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
 
       - name: Get Deployment Info Before Test
         id: get-deployment-before
