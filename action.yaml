@@ -465,7 +465,7 @@ runs:
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
     - name: Image and DAG Deploy to Astro
-      if: ${{ inputs.deploy-image == true || ( (inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'infer') && steps.deploy-type.outputs.DAGS_ONLY_DEPLOY == 'false' && steps.deploy-type.outputs.SKIP_IMAGE_OR_DAGS_DEPLOY == 'false' ) }}
+      if: ${{ inputs.deploy-image == 'true' || ( (inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'infer') && steps.deploy-type.outputs.DAGS_ONLY_DEPLOY == 'false' && steps.deploy-type.outputs.SKIP_IMAGE_OR_DAGS_DEPLOY == 'false' ) }}
       run: |
         echo ::group::Image and DAG Deploy to Astro
         # Deploy image and DAGs
