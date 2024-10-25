@@ -94,6 +94,10 @@ inputs:
     required: false
     default: false
     description: "Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`."
+  wake-on-deploy:
+    required: false
+    default: false
+    description: "If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -449,6 +453,35 @@ runs:
         echo ::endgroup::
       shell: bash
       id: deploy-options
+    - name: Determine if Development Mode is enabled
+      if: ${{ inputs.wake-on-deploy == 'true' && inputs.action != 'delete-deployment-preview' }}
+      run: |
+        echo ::group::Determine if Development Mode is enabled
+        DEPLOYMENT_TYPE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.deployment_type)
+        # only inspect development mode if deployment is not hybrid
+        if [[ $DEPLOYMENT_TYPE != "HYBRID" ]]; then
+          DEV_MODE=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.is_development_mode)
+          echo "Deployment development mode: $DEV_MODE"
+          if [[ $DEV_MODE == "" ]]; then
+            echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
+          else
+            echo "DEVELOPMENT_MODE=$DEV_MODE" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "DEVELOPMENT_MODE=false" >> $GITHUB_OUTPUT
+        fi
+        echo ::endgroup::
+      shell: bash
+      id: development-mode
+    - name: Override to wake up the Deployment
+      if: ${{ inputs.wake-on-deploy == 'true' && inputs.action != 'delete-deployment-preview' && steps.development-mode.outputs.DEVELOPMENT_MODE == 'true' }}
+      run: |
+        echo ::group::Override to wake up the Deployment
+        astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --force
+        # Give it some time to wake up
+        sleep 60
+        echo ::endgroup::
+      shell: bash
     - name: DAG Deploy to Astro
       if: ${{ (inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'infer') && steps.deploy-type.outputs.DAGS_ONLY_DEPLOY == 'true' }}
       run: |
@@ -504,5 +537,12 @@ runs:
         if [[ ${{ inputs.copy-pools }} == true ]]; then
           astro deployment pool copy --source-id ${{steps.deployment-preview.outputs.ORIGINAL_DEPLOYMENT_ID}} --target-id ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}}
         fi
+        echo ::endgroup::
+      shell: bash
+    - name: Remove override on Deployment to resume schedule
+      if: ${{ inputs.wake-on-deploy == 'true' && inputs.action != 'delete-deployment-preview' && steps.development-mode.outputs.DEVELOPMENT_MODE == 'true' }}
+      run: |
+        echo ::group::Remove override on Deployment to resume schedule
+        astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --remove-override --force
         echo ::endgroup::
       shell: bash
