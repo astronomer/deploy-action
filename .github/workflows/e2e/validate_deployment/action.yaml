@@ -8,6 +8,9 @@ inputs:
   is_no_deploy:
     description: If the deploy test was a no-op
     default: false
+  is_wake_on_deploy:
+    description: If the deploy test was a wake-on-deploy
+    default: false
   dag_tarball_version_before:
     description: The desired DAG tarball version before the test
     required: true
@@ -19,6 +22,12 @@ inputs:
     required: true
   image_version_after:
     description: The image version after the test
+    required: true
+  hibernation_spec_before:
+    description: The hibernation spec before the test
+    required: true
+  hibernation_spec_after:
+    description: The hibernation spec after the test
     required: true
 
 runs:
@@ -55,3 +64,17 @@ runs:
         fi
         echo "Deploy Action validation failed: neither desiredDagTarballVersion or imageVersion were updated after the test"
         exit 1
+
+    - name: Validate Hibernation Spec
+      id: validate-hibernation-spec
+      shell: bash
+      run: |
+
+        if [[ "${{ inputs.is_wake_on_deploy }}" == "true" ]]; then
+          if [[ '${{ inputs.hibernation_spec_before }}' == '${{ inputs.hibernation_spec_after }}' ]]; then
+            echo "Hibernation Spec validation succeeded: hibernation spec was not updated after the test"
+            exit 0
+          fi
+          echo "Hibernation Spec validation failed: hibernation spec updated"
+          exit 1
+        fi

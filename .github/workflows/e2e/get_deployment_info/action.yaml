@@ -24,6 +24,9 @@ outputs:
   desired_image_version:
     description: The image version
     value: ${{ steps.get-deployment-info.outputs.desired_image_version }}
+  hibernation_spec:
+    description: The hibernation spec
+    value: ${{ steps.get-deployment-info.outputs.hibernation_spec }}
 
 runs:
   using: "composite"
@@ -39,5 +42,7 @@ runs:
         fi
         desired_dag_tarball_version=$(cat response.json | jq -r '.desiredDagTarballVersion')
         desired_image_version=$(cat response.json | jq -r '.desiredImageVersion')
+        hibernation_spec=$(cat response.json | jq -rc '.scalingSpec.hibernationSpec')
         echo "desired_dag_tarball_version=$desired_dag_tarball_version" >> $GITHUB_OUTPUT
         echo "desired_image_version=$desired_image_version" >> $GITHUB_OUTPUT
+        echo "hibernation_spec=$hibernation_spec" >> $GITHUB_OUTPUT

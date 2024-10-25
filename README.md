@@ -66,6 +66,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `build-secrets` | `` | Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'. |
 | `mount-path` | `` | Path to mount dbt project in Airflow, for reference by DAGs. Default /usr/local/airflow/dbt/{dbt project name} |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
+| `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
 
 
 ## Outputs
@@ -246,6 +247,21 @@ steps:
     root-folder: astro-project/
     parse: true
 ```
+
+### Wake on deploy
+
+In the following example, the deployment is woken up from hibernation before deploying via the `wake-on-deploy` option.
+
+```yaml
+steps:
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.7.1
+  with:
+    deployment-id: <deployment id>
+    wake-on-deploy: true
+```
+
+This is especially useful when you have a deployment that is hibernated and you want to deploy to it. This option overrides the deployment's hibernation override spec.
 
 ## Deployment Preview Templates
 
