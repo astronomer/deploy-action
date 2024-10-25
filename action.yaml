@@ -478,8 +478,11 @@ runs:
       run: |
         echo ::group::Override to wake up the Deployment
         astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --force
-        # Give it some time to wake up
-        sleep 60
+        # Wait for the deployment to wake up
+        while [ "$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key metadata.status)" == "HIBERNATING" ]
+        do
+          sleep 5
+        done
         echo ::endgroup::
       shell: bash
     - name: DAG Deploy to Astro
