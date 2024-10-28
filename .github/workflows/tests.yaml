@@ -55,9 +55,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        deployment: [deployment.yaml]
+        deployment: [deployment-hibernate.yaml, deployment.yaml]
     outputs:
       DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
+      HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -98,8 +99,11 @@ jobs:
           sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  e2e-setup/deployment-templates/${{ matrix.deployment }}
 
           DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
-          echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-
+          if [[ "${{ matrix.deployment }}" == "deployment.yaml" ]]; then
+            echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          else
+            echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          fi
   default-deploy-tests:
     name: Default Deploy Test
     runs-on: ubuntu-latest
@@ -108,7 +112,10 @@ jobs:
       max-parallel: 1
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
@@ -166,6 +173,7 @@ jobs:
         with:
           deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -179,11 +187,14 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           is_dag_only_deploy: ${{ matrix.deploy_type == 'dags' }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
   # DAG Deploy test would test the DAG only deploy functionality in deploy action
   dag-deploy-test:
@@ -193,7 +204,10 @@ jobs:
     strategy:
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -242,6 +256,7 @@ jobs:
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           parse: true
           root-folder: e2e-setup/astro-project
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -255,11 +270,14 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           is_dag_only_deploy: true
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
   pytests-test:
     name: Pytest Test
@@ -268,7 +286,10 @@ jobs:
     strategy:
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -322,6 +343,7 @@ jobs:
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -335,10 +357,13 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
   infer-deploy:
     name: Infer Deploy Test
@@ -348,7 +373,10 @@ jobs:
       max-parallel: 1
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
@@ -406,6 +434,7 @@ jobs:
           parse: true
           action: deploy
           root-folder: e2e-setup/astro-project
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -419,11 +448,14 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           is_dag_only_deploy: ${{ matrix.deploy_type == 'dags' }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
   no-deploy-test:
     name: No Deploy Test
@@ -432,7 +464,10 @@ jobs:
     strategy:
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
         deploy_type: [infer, dbt, dags, image-and-dags]
     steps:
       - name: Checkout code
@@ -487,6 +522,7 @@ jobs:
           action: deploy
           deploy-type: ${{ matrix.deploy_type }}
           root-folder: ${{ matrix.deploy_type == 'dbt' && 'e2e-setup/dbt' || 'e2e-setup/astro-project' }}
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -502,11 +538,14 @@ jobs:
         if: ${{ matrix.deploy_type != 'dbt' }}
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           is_no_deploy: true
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
@@ -539,7 +578,10 @@ jobs:
     strategy:
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -589,6 +631,7 @@ jobs:
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -602,10 +645,13 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desiredDagTarballVersion }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
   # DBT Deploy test would test the DAG only deploy functionality in deploy action
   dbt-deploy-test:
@@ -615,7 +661,10 @@ jobs:
     strategy:
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -661,6 +710,7 @@ jobs:
           root-folder: e2e-setup/dbt
           deploy-type: dbt
           description: "test-dbt-deploy-action"
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
@@ -698,7 +748,10 @@ jobs:
     strategy:
       matrix:
         deployment_id:
-          ["${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}"]
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -744,6 +797,7 @@ jobs:
           copy-connections: false
           copy-airflow-variables: false
           copy-pools: false
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-create-preview
@@ -758,10 +812,13 @@ jobs:
         id: validate-deployment-preview-create
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           dag_tarball_version_before: ""
           image_version_before: "12.2.0"
+          hibernation_spec_before: '{"schedules":[{"isEnabled":true,"hibernateAtCron":"0 * * * *","wakeAtCron":"1 * * * *"},{"isEnabled":true,"hibernateAtCron":"1 * * * *","wakeAtCron":"0 * * * *"}]}'
           dag_tarball_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after-create-preview.outputs.hibernation_spec }}
 
       - name: Mock git commands
         run: |
@@ -787,6 +844,7 @@ jobs:
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-deploy-preview
@@ -801,10 +859,13 @@ jobs:
         id: validate-deployment-preview-deploy
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           dag_tarball_version_before: ${{ steps.get-deployment-before-deploy.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before-deploy.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before-deploy.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after-deploy-preview.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-deploy-preview.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after-deploy-preview.outputs.hibernation_spec }}
 
       - name: Mock git commands for DAG Deploy
         run: |
@@ -831,6 +892,7 @@ jobs:
           deploy-type: dags-only
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get Deployment Info After DAG Deploy Test
         id: get-deployment-after-dag-deploy
@@ -845,11 +907,14 @@ jobs:
         id: validate-dag-deploy-action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           is_dag_only_deploy: true
           dag_tarball_version_before: ${{ steps.get-deployment-before-dag-deploy.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before-dag-deploy.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before-dag-deploy.outputs.hibernation_spec }}
           dag_tarball_version_after: ${{ steps.get-deployment-after-dag-deploy.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-dag-deploy.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after-dag-deploy.outputs.hibernation_spec }}
 
       - name: Mock git commands for DBT Deploy
         run: |
@@ -867,6 +932,7 @@ jobs:
           description: "test-dbt-deploy-action"
           root-folder: e2e-setup/dbt
           preview-name: test-preview-${{ matrix.deployment_id }}
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
@@ -959,3 +1025,4 @@ jobs:
       - name: Delete Deployment
         run: |
           astro deployment delete -f ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          astro deployment delete -f ${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
