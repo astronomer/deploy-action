@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - fix/tag-event-case
   workflow_dispatch:
     inputs:
       workspace_id:
