@@ -2,7 +2,7 @@ deployment:
   configuration:
     name: deploy-action-non-dev-e2e
     description: ""
-    runtime_version: 12.2.0
+    runtime_version: 12.5.0
     dag_deploy_enabled: true
     ci_cd_enforcement: false
     scheduler_size: SMALL
@@ -13,7 +13,7 @@ deployment:
     workspace_name: Deploy Action E2E
     deployment_type: STANDARD
     cloud_provider: AWS
-    region: us-east-1
+    region: us-west-2
     default_task_pod_cpu: "0.25"
     default_task_pod_memory: 0.5Gi
     resource_quota_cpu: "10"
