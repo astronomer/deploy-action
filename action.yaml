@@ -65,6 +65,10 @@ inputs:
     required: false
     default: true
     description: "Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action"
+  branch:
+    required: false
+    default: ""
+    description: "The branch to checkout. If not specified, the branch will be inferred from the event."
   description:
     required: false
     description: >
@@ -301,6 +305,8 @@ runs:
       id: dag-deploy-enabled
     - name: Get DBT Deploy Options
       if: ${{ inputs.deploy-type == 'dbt' }}
+      env:
+        BRANCH: ${{ inputs.branch || github.ref }}
       run: |
 
         echo ::group::Get DBT Deploy Options
@@ -309,7 +315,7 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        branch=$(echo "${GITHUB_REF#refs/heads/}")
+        branch=$(echo "${BRANCH#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
 
@@ -353,6 +359,8 @@ runs:
       id: dbt-deploy-options
     - name: Get Deploy Type
       if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' }}
+      env:
+        BRANCH: ${{ inputs.branch || github.ref }}
       run: |
 
         # infer based on files changed to deploy only dags or image and dags
@@ -362,7 +370,7 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        branch=$(echo "${GITHUB_REF#refs/heads/}")
+        branch=$(echo "${BRANCH#refs/heads/}")
         echo "Branch pushed to: $branch"
         git fetch origin $branch
 
