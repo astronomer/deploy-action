@@ -245,7 +245,7 @@ runs:
             else
               # Get deployment name from Astro if preview-name is not provided
               DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
-              # using github.event.ref 
+              # using github.event.ref
               branch_ref="${{ github.event.ref }}"
               branch_name="${branch_ref##*/}"
               BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
