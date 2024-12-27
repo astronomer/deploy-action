@@ -243,13 +243,13 @@ runs:
           if [[ "${{ inputs.preview-name }}" != "" ]]; then
             BRANCH_DEPLOYMENT_NAME="${{ inputs.preview-name }}"
           else
-              # Get deployment name from Astro if preview-name is not provided
-              DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
-              # using github.event.ref to refer the actual branch getting deleted
-              branch_ref="${{ github.event.ref }}"
-              branch_name="${branch_ref##*/}"
-              BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
-              BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
+            # Get deployment name from Astro if preview-name is not provided
+            DEPLOYMENT_NAME="$(astro deployment inspect $DEPLOYMENT_ID --clean-output --key configuration.name)"
+            # using github.event.ref to refer the actual branch getting deleted
+            branch_ref="${{ github.event.ref }}"
+            branch_name="${branch_ref##*/}"
+            BRANCH_DEPLOYMENT_NAME=${branch_name}_$DEPLOYMENT_NAME
+            BRANCH_DEPLOYMENT_NAME="${BRANCH_DEPLOYMENT_NAME// /_}"
           fi
           # delete branch deployment
           astro deployment delete -n $BRANCH_DEPLOYMENT_NAME -f
