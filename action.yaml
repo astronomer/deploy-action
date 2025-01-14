@@ -315,12 +315,13 @@ runs:
 
         DBT_DEPLOY=false
 
-        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the dbt project because we cannot determine that it does not need to be deployed
+        # case when the triggered event is a new branch or tag creation, we would need to deploy the dbt project because we cannot determine that it does not need to be deployed
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
-        if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" || -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
-            DBT_DEPLOY=true
-            files=()
+        if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" ]]
+        then
+          DBT_DEPLOY=true
+          files=()
         else
           files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
           echo "files changed: $files"
@@ -362,25 +363,45 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        branch=$(echo "${GITHUB_REF#refs/heads/}")
-        echo "Branch pushed to: $branch"
-        git fetch origin $branch
-
+        ##### START ARCH-23156 PATCH
+        # Switch initialization of these variables to the "off" case as there are more than one case where that is what we want.
         DAGS_ONLY_DEPLOY=false
-        SKIP_IMAGE_OR_DAGS_DEPLOY=true
+        SKIP_IMAGE_OR_DAGS_DEPLOY=false
+        files=()
+        ##### END ARCH-23156 PATCH     
 
-        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
-        if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" ||  -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
-            DAGS_ONLY_DEPLOY=false
-            SKIP_IMAGE_OR_DAGS_DEPLOY=false
-            files=()
-        else
-          files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
+        # case when the triggered event is a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
+        if [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]
+        then
+          echo "github.event.before detected to be: 0000000000000000000000000000000000000000"
+        ##### START ARCH-23156 PATCH
+        elif [[ "$GITHUB_REF" == refs/tags/* ]]
+        then     
+          # This branch is how things were solved in Issue 82 and is very likely redundant 
+          # with the "${{ github.event.before }}" == "0000000000000000000000000000000000000000" case above
+          tag_name="${GITHUB_REF#refs/tags/}"
+          echo "Tag Push Event. Tag name: $tag_name"                    
+        elif [[ "$GITHUB_REF" == refs/pull/*/merge ]]; then
+          pr_number="${GITHUB_REF#refs/pull/}"
+          pr_number="${pr_number%%/*}"
+          echo "Pull Request number: $pr_number"                       
+        elif [[ "$GITHUB_REF" == refs/heads/* ]]; 
+        then
+          branch=$(echo "${GITHUB_REF#refs/heads/}")
+          echo "Branch pushed to: $branch"
+          git fetch origin $branch       
+          SKIP_IMAGE_OR_DAGS_DEPLOY=true          
+          ##### END ARCH-23156 PATCH        
+          files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
           echo "files changed: $files"
+        # ARCH-23156 PATCH
+        else
+          echo "Unknown event type. $GITHUB_REF" 
+        # END ARCH-23156 PATCH
         fi
-
+      
         for file in $files; do
           if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
             echo $file is part of the input root folder
@@ -404,6 +425,24 @@ runs:
             fi
           fi
         done
+       
+
+        ##### START ARCH-23156 PATCH
+        set -x
+        echo "======================"
+        echo "DEBUGGING INFORMATION"
+        echo "======================"
+        echo "GITHUB_REF=$GITHUB_REF"
+        echo "github.event.before=${{ github.event.before }}"
+        echo "github.event.after=${{ github.event.after }}"
+        echo "inputs.image-name = ${{ inputs.image-name }}"
+        echo "SKIP_IMAGE_OR_DAGS_DEPLOY = $SKIP_IMAGE_OR_DAGS_DEPLOY"
+        echo "steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED = ${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }}"
+        echo "inputs.action = ${{ inputs.action }}"
+        echo "========================="
+        echo "END DEBUGGING INFORMATION"
+        echo "========================="
+        ##### END ARCH-23156 PATCH
 
         # Note: the order of these following checks is important to ensure that we skip/trigger deploy correctly in following cases:
         # 1. When there is no change in the input root folder we should skip deploy, but not when it's deployment preview create action
@@ -569,3 +608,4 @@ runs:
         astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --remove-override --force
         echo ::endgroup::
       shell: bash
+
