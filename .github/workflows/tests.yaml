@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - fix/rebase-force-push
   workflow_dispatch:
     inputs:
       workspace_id:
