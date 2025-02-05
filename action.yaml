@@ -372,8 +372,8 @@ runs:
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" ||  -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
           echo "Manual workflow dispatch or a new branch or tag creation, hence missing github event before and/or after commit hash"
         else
+          echo "event that triggered the workflow: $GITHUB_REF"
           branch=$(echo "${GITHUB_REF#refs/heads/}")
-          echo "Branch push triggered the workflow: $branch"
           git fetch origin $branch
           if ! git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
             echo "Commit ${{ github.event.before }} does not exist, falling back to image deploy."
