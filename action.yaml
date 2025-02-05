@@ -382,6 +382,7 @@ runs:
             files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
             echo "files changed: $files"
           fi
+        fi
 
         for file in $files; do
           if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
