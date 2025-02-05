@@ -382,11 +382,10 @@ runs:
           branch=$(echo "${GITHUB_REF#refs/heads/}")
           echo "Branch push triggered the workflow: $branch"
           git fetch origin $branch
-          SKIP_IMAGE_OR_DAGS_DEPLOY=true
           if ! git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
-            echo "Commit ${{ github.event.before }} does not exist, falling back to HEAD."
-            files=$(git diff --name-only HEAD ${{ github.event.after }})
+            echo "Commit ${{ github.event.before }} does not exist, falling back to image deploy."
           else
+            SKIP_IMAGE_OR_DAGS_DEPLOY=true
             files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
           fi
           echo "files changed: $files"
