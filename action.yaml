@@ -362,10 +362,6 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        branch=$(echo "${GITHUB_REF#refs/heads/}")
-        echo "Branch pushed to: $branch"
-        git fetch origin $branch
-
         DAGS_ONLY_DEPLOY=false
         SKIP_IMAGE_OR_DAGS_DEPLOY=false
         files=()
