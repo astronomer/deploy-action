@@ -2,27 +2,6 @@ name: E2E Tests for Astro Deploy Action
 
 on:
   push:
-    branches:
-      - main
-      - fix/rebase-force-push
-  workflow_dispatch:
-    inputs:
-      workspace_id:
-        description: "Workspace ID"
-        required: false
-        default: ""
-      org_id:
-        description: "Organization ID"
-        required: false
-        default: ""
-      astronomer_host:
-        description: "Astronomer Host"
-        required: false
-        default: ""
-      token:
-        description: "API Token"
-        required: false
-        default: ""
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
@@ -31,6 +10,7 @@ jobs:
   redact-inputs:
     name: Redact Inputs
     runs-on: ubuntu-latest
+    environment: e2e-test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
