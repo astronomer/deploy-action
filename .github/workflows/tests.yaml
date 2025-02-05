@@ -79,9 +79,7 @@ jobs:
       - name: Install dependencies
         run: |
 
-          sudo add-apt-repository ppa:rmescandon/yq
-          sudo apt update
-          sudo apt install yq -y
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
 
           curl -sSL https://install.astronomer.io | sudo bash -s
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
