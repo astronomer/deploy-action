@@ -2,7 +2,7 @@ deployment:
   configuration:
     name: deploy-action-hibernate-e2e
     description: ""
-    runtime_version: 12.5.0
+    runtime_version: 12.6.0
     dag_deploy_enabled: true
     ci_cd_enforcement: false
     scheduler_size: SMALL
