@@ -319,8 +319,8 @@ runs:
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" || -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
-            DBT_DEPLOY=true
-            files=()
+          DBT_DEPLOY=true
+          files=()
         else
           files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
           echo "files changed: $files"
@@ -367,18 +367,30 @@ runs:
         git fetch origin $branch
 
         DAGS_ONLY_DEPLOY=false
-        SKIP_IMAGE_OR_DAGS_DEPLOY=true
+        SKIP_IMAGE_OR_DAGS_DEPLOY=false
+        files=()
 
-        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
+        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" ||  -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
-            DAGS_ONLY_DEPLOY=false
-            SKIP_IMAGE_OR_DAGS_DEPLOY=false
-            files=()
-        else
-          files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
+          echo "Manual workflow dispatch or a new branch or tag creation, hence missing github event before and/or after commit hash"
+        elif [[ "$GITHUB_REF" == refs/pull/*/merge ]]; then
+          pr_number="${GITHUB_REF#refs/pull/}"
+          pr_number="${pr_number%%/*}"
+          echo "Pull request triggered the workflow: $pr_number"
+          DAGS_ONLY_DEPLOY=false
+          SKIP_IMAGE_OR_DAGS_DEPLOY=false
+          files=()
+        elif [[ "$GITHUB_REF" == refs/heads/* ]]; then
+          branch=$(echo "${GITHUB_REF#refs/heads/}")
+          echo "Branch push triggered the workflow: $branch"
+          git fetch origin $branch
+          SKIP_IMAGE_OR_DAGS_DEPLOY=true
+          files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
           echo "files changed: $files"
+        else
+          echo "Unknown event type: $GITHUB_REF, using image deploy"
         fi
 
         for file in $files; do
