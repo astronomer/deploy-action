@@ -793,7 +793,7 @@ jobs:
         with:
           is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           dag_tarball_version_before: ""
-          image_version_before: "12.6.0"
+          image_version_before: "12.7.1"
           hibernation_spec_before: '{"schedules":[{"isEnabled":true,"hibernateAtCron":"0 * * * *","wakeAtCron":"1 * * * *"},{"isEnabled":true,"hibernateAtCron":"1 * * * *","wakeAtCron":"0 * * * *"}]}'
           dag_tarball_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_image_version }}
