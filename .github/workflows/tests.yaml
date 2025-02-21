@@ -2,26 +2,6 @@ name: E2E Tests for Astro Deploy Action
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-    inputs:
-      workspace_id:
-        description: "Workspace ID"
-        required: false
-        default: ""
-      org_id:
-        description: "Organization ID"
-        required: false
-        default: ""
-      astronomer_host:
-        description: "Astronomer Host"
-        required: false
-        default: ""
-      token:
-        description: "API Token"
-        required: false
-        default: ""
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
@@ -30,6 +10,7 @@ jobs:
   redact-inputs:
     name: Redact Inputs
     runs-on: ubuntu-latest
+    environment: e2e-test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -79,9 +60,7 @@ jobs:
       - name: Install dependencies
         run: |
 
-          sudo add-apt-repository ppa:rmescandon/yq
-          sudo apt update
-          sudo apt install yq -y
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
 
           curl -sSL https://install.astronomer.io | sudo bash -s
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -814,7 +793,7 @@ jobs:
         with:
           is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           dag_tarball_version_before: ""
-          image_version_before: "12.5.0"
+          image_version_before: "12.7.1"
           hibernation_spec_before: '{"schedules":[{"isEnabled":true,"hibernateAtCron":"0 * * * *","wakeAtCron":"1 * * * *"},{"isEnabled":true,"hibernateAtCron":"1 * * * *","wakeAtCron":"0 * * * *"}]}'
           dag_tarball_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_image_version }}

@@ -322,8 +322,8 @@ runs:
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" || -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
-            DBT_DEPLOY=true
-            files=()
+          DBT_DEPLOY=true
+          files=()
         else
           files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
           echo "files changed: $files"
@@ -365,23 +365,26 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        branch=$(echo "${GITHUB_REF#refs/heads/}")
-        echo "Branch pushed to: $branch"
-        git fetch origin $branch
-
         DAGS_ONLY_DEPLOY=false
-        SKIP_IMAGE_OR_DAGS_DEPLOY=true
+        SKIP_IMAGE_OR_DAGS_DEPLOY=false
+        files=()
 
-        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
+        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" ||  -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
-            DAGS_ONLY_DEPLOY=false
-            SKIP_IMAGE_OR_DAGS_DEPLOY=false
-            files=()
+          echo "Manual workflow dispatch or a new branch or tag creation, hence missing github event before and/or after commit hash"
         else
-          files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
-          echo "files changed: $files"
+          echo "event that triggered the workflow: $GITHUB_REF"
+          branch=$(echo "${GITHUB_REF#refs/heads/}")
+          git fetch origin $branch
+          if ! git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
+            echo "Commit ${{ github.event.before }} does not exist, falling back to image deploy."
+          else
+            SKIP_IMAGE_OR_DAGS_DEPLOY=true
+            files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+            echo "files changed: $files"
+          fi
         fi
 
         for file in $files; do
