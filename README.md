@@ -122,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.9.0
+      uses: astronomer/deploy-action@v0.10.0
       with:
         deployment-id: <deployment id>
         parse: true
@@ -137,7 +137,7 @@ In the following example, the folder `/example-dags/` is specified as the root f
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.9.0
+  uses: astronomer/deploy-action@v0.10.0
   with:
     deployment-id: <deployment id>
     root-folder: /example-dags/
@@ -150,7 +150,7 @@ In the following example, the pytest located at `/tests/test-tags.py` runs befor
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.9.0
+  uses: astronomer/deploy-action@v0.10.0
   with:
     deployment-id: <deployment id>
     pytest: true
@@ -164,7 +164,7 @@ In the following example, `force` is enabled and both the DAG parse and pytest p
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.9.0
+  uses: astronomer/deploy-action@v0.10.0
   with:
     deployment-id: <deployment id>
     force: true
@@ -207,7 +207,7 @@ jobs:
         build-args: |
           <your-build-arguments>
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.9.0
+      uses: astronomer/deploy-action@v0.10.0
       with:
         deployment-id: <deployment id>
         deploy-type: image-and-dags
@@ -222,7 +222,7 @@ In the following example we would be deploying the dbt project located at `dbt` 
 ```yaml
 steps:
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.9.0
+  uses: astronomer/deploy-action@v0.10.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
@@ -236,13 +236,13 @@ In the following example we would setup a workflow to deploy dags/images located
 ```yaml
 steps:
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.9.0
+  uses: astronomer/deploy-action@v0.10.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
     root-folder: dbt
 - name: DAGs/Image Deploy to Astro
-  uses: astronomer/deploy-action@v0.9.0
+  uses: astronomer/deploy-action@v0.10.0
   with:
     deployment-id: <deployment id>
     root-folder: astro-project/
@@ -256,7 +256,7 @@ In the following example, the deployment is woken up from hibernation before dep
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.9.0
+  uses: astronomer/deploy-action@v0.10.0
   with:
     deployment-id: <deployment id>
     wake-on-deploy: true
@@ -292,7 +292,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.9.0
+      uses: astronomer/deploy-action@v0.10.0
       with:
         action: create-deployment-preview
         deployment-id: <orginal deployment id>
@@ -317,7 +317,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.9.0
+      uses: astronomer/deploy-action@v0.10.0
       with:
         action: deploy-deployment-preview
         deployment-id: <orginal deployment id>
@@ -342,7 +342,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.9.0
+      uses: astronomer/deploy-action@v0.10.0
       with:
         action: deploy-deployment-preview
         deploy-type: dbt
@@ -369,7 +369,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Delete Deployment Preview
-      uses: astronomer/deploy-action@v0.9.0
+      uses: astronomer/deploy-action@v0.10.0
       with:
         action: delete-deployment-preview
         deployment-id: <orginal deployment id>
@@ -394,7 +394,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.9.0
+      uses: astronomer/deploy-action@v0.10.0
       with:
         deployment-id: <orginal deployment id>
 ```
