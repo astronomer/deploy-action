@@ -337,7 +337,7 @@ runs:
         done
 
         options=""
-        if [[ $dbt_deploy == 1 ]]; then
+        if [[ $DBT_DEPLOY == true ]]; then
           # Add mount path option
           if [[ "${{ inputs.mount-path }}" != "" ]]; then
             options="$options --mount-path=${{ inputs.mount-path }}"
