@@ -224,7 +224,8 @@ runs:
           astro deployment create --deployment-file deployment-preview-template.yaml
 
           # Get final Deployment ID
-          echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
+          FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)
+          echo "FINAL_DEPLOYMENT_ID=$FINAL_DEPLOYMENT_ID" >> $GITHUB_OUTPUT
 
           # Get original Deployment ID
           echo "ORIGINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
