@@ -231,8 +231,8 @@ runs:
           echo "ORIGINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
 
           DELAY=15
-          # Maximum DELAY cap (6 minutes)
-          MAX_DELAY=241
+          # Maximum DELAY cap (~8 minutes)
+          MAX_DELAY=481
 
           # Command to check the deployment status
           INSPECT_DEPLOYMENT="astro deployment inspect $FINAL_DEPLOYMENT_ID  --clean-output --key metadata.status"
