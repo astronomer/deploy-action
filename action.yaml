@@ -220,14 +220,40 @@ runs:
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
 
-          # Create new deployment preview based on the deployment template file and wait for 7 minutes to get the webserver ready
-          astro deployment create --deployment-file deployment-preview-template.yaml --wait 7m
+          # Create new deployment preview based on the deployment template file
+          astro deployment create --deployment-file deployment-preview-template.yaml
 
           # Get final Deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
 
           # Get original Deployment ID
           echo "ORIGINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+          DELAY=15
+          # Maximum DELAY cap (6 minutes)
+          MAX_DELAY=241
+
+          # Command to check the deployment status
+          INSPECT_DEPLOYMENT="astro deployment inspect $FINAL_DEPLOYMENT_ID  --clean-output --key metadata.status"
+
+          echo "Starting deployment health check..."
+
+          while true; do
+              status=$(eval "$INSPECT_DEPLOYMENT")
+              echo "Current status: $status"
+              if [ "$status" == "HEALTHY" ]; then
+                  echo "Deployment is healthy!"
+                  break
+              fi
+              echo "Preview deplyment $FINAL_DEPLOYMENT_ID not healthy yet. Retrying in $DELAY seconds..."
+              sleep $DELAY
+
+              # Exponentially increase DELAY but cap it at MAX_DELAY
+              DELAY=$((DELAY * 2))
+              if [[ "$DELAY" -gt "$MAX_DELAY" ]]; then
+                echo ERROR: cannot create a deployment preview sucessfully, deployment is not healthy.
+              fi
+          done
         fi
 
         # delete deployment preview and skip deploy if action is delete-deployment-preview
