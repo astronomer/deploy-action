@@ -253,6 +253,7 @@ runs:
               DELAY=$((DELAY * 2))
               if [[ "$DELAY" -gt "$MAX_DELAY" ]]; then
                 echo ERROR: cannot create a deployment preview sucessfully, deployment is not healthy.
+                exit 1 # terminate and indicate error
               fi
           done
         fi
