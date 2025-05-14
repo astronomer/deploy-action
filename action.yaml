@@ -2,8 +2,8 @@ name: "Deploy Apache Airflow DAGs to Astro"
 description: "Test your DAGs and deploy your Astro project to a Deployment on Astro, Astronomer's managed Airflow service."
 author: "Astronomer"
 branding:
-  icon: 'upload-cloud'
-  color: 'purple'
+  icon: "upload-cloud"
+  color: "purple"
 inputs:
   root-folder:
     required: false
@@ -94,7 +94,7 @@ runs:
       uses: actions/checkout@v4
       if: inputs.checkout == 'true'
       with:
-        fetch-depth: 0  # Fetch all history
+        fetch-depth: 0 # Fetch all history
         ref: ${{ github.event.after }}
         clean: false
     - name: Install Astro CLI
@@ -160,6 +160,9 @@ runs:
 
           # Enable development mode
           sed -i "s|  is_development_mode:.*|  is_development_mode: true|g" deployment-preview-template.yaml
+
+          # Set scheduler size to small
+          sed -i "s|  scheduler_size:.*|  scheduler_size: small|g" deployment-preview-template.yaml
           
           # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
@@ -355,8 +358,10 @@ runs:
       run: |
         if [[ ${{steps.development-mode.outputs.DEVELOPMENT_MODE}} == true ]]; then
           astro deployment wake-up ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --force
-          # Give it some time to wake up
-          sleep 60
+          while [ "$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key metadata.status)" == "HIBERNATING" ]
+          do
+            sleep 5
+          done
         fi
       shell: bash
     - name: DAG Deploy to Astro
