@@ -155,6 +155,12 @@ runs:
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
 
+          # Disable HA mode
+          sed -i "s|  is_high_availability:.*|  is_high_availability: false|g"  deployment-preview-template.yaml
+
+          # Enable development mode
+          sed -i "s|  is_development_mode:.*|  is_development_mode: true|g" deployment-preview-template.yaml
+          
           # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
 
