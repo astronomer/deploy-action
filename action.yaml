@@ -82,6 +82,18 @@ inputs:
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
+  worker-max-count:
+    required: false
+    default: "10"
+    description: "Maximum number of workers for the worker queue in preview deployments"
+  worker-concurrency:
+    required: false
+    default: "1"
+    description: "Worker concurrency for the worker queue in preview deployments"
+  worker-type:
+    required: false
+    default: "A5"
+    description: "Worker type for the worker queue in preview deployments"
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -163,6 +175,19 @@ runs:
 
           # Set scheduler size to small
           sed -i "s|  scheduler_size:.*|  scheduler_size: small|g" deployment-preview-template.yaml
+          
+          # Configure worker queues
+          yq eval '
+            .deployment.worker_queues = [
+              {
+                "name": "default",
+                "max_worker_count": ${{ inputs.worker-max-count }},
+                "min_worker_count": 0,
+                "worker_concurrency": ${{ inputs.worker-concurrency }},
+                "worker_type": "${{ inputs.worker-type }}"
+              }
+            ]
+          ' -i deployment-preview-template.yaml
           
           # Create new deployment preview based on the deployment template file
           astro deployment create --deployment-file deployment-preview-template.yaml
