@@ -520,7 +520,7 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --dags ${{steps.deploy-options.outputs.OPTIONS}}
         echo ::endgroup::
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
@@ -534,7 +534,7 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
+        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}}
         echo ::endgroup::
       shell: bash
     - name: DBT Deploy to Astro
@@ -547,7 +547,7 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
+        astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
         echo ::endgroup::
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
