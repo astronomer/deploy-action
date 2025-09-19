@@ -58,6 +58,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`.|
 | `force` | `false` | When set to `true`, your code is deployed and skips any pytest or parsing errors. |
+| `force-upgrade-to-af3` | `false` | When set to `true`, appends `--force-upgrade-to-af3` to Astro deploy commands to allow upgrading a Deployment from Airflow 2 to Airflow 3. |
 | `image-name` | | Specifies a custom, locally built image to deploy. To be used with `deploy-type` set to `image-and-dags` or `infer` |
 | `workspace` | | Workspace id to select. Only required when `ASTRO_API_TOKEN` is given an organization token. |
 | `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name. |
