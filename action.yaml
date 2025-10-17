@@ -130,11 +130,13 @@ runs:
           CLI_VERSION=$(astro version | awk '{print $4}')
         fi
 
+        # Ensure semver CLI is available for version comparisons
+        if ! command -v semver &> /dev/null; then
+          npm install -g semver
+        fi
+
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
         if [[ "${{ inputs.deploy-type }}" == "dbt" && $CLI_VERSION != "" ]]; then
-          #install semver to compare versions
-          npm install -g semver
-
           REQUIRED_VERSION="1.28.1"
           CURRENT_VERSION=$(astro version | awk '{print $4}')
           if ! semver -r ">${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
@@ -220,8 +222,22 @@ runs:
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
 
-          # Create new deployment preview based on the deployment template file
-          astro deployment create --wait --deployment-file deployment-preview-template.yaml
+          # Decide whether deployment create can run with --wait based on CLI version
+          CLI_VERSION=$(astro version | awk '{print $4}')
+          REQUIRED_WAIT_VERSION="1.37.0"
+
+          if command -v semver >/dev/null 2>&1 && [[ -n "$CLI_VERSION" ]] && semver -r ">=${REQUIRED_WAIT_VERSION}" "$CLI_VERSION" >/dev/null 2>&1; then
+            astro deployment create --wait --deployment-file deployment-preview-template.yaml
+          else
+            if ! command -v semver >/dev/null 2>&1; then
+              echo "semver CLI not available; continuing without deployment create --wait"
+            elif [[ -z "$CLI_VERSION" ]]; then
+              echo "Unable to determine Astro CLI version; continuing without deployment create --wait"
+            else
+              echo "Astro CLI $CLI_VERSION does not support deployment create --wait; continuing without it"
+            fi
+            astro deployment create --deployment-file deployment-preview-template.yaml
+          fi
 
           # Get final Deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
