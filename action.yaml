@@ -98,6 +98,9 @@ inputs:
     required: false
     default: false
     description: "If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec."
+  wait-time:
+    required: false
+    description: "The time to wait for the deployment or deploy operation to finish successfully."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -141,6 +144,15 @@ runs:
           CURRENT_VERSION=$(astro version | awk '{print $4}')
           if ! semver -r ">${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
             echo "DBT Deploy requires Astro CLI version $REQUIRED_VERSION or higher"
+            exit 1
+          fi
+        fi
+
+        # Check if the Astro CLI version is less than 1.38.0 for wait-time option
+        if [[ "${{ inputs.wait-time }}" != "" && $CLI_VERSION != "" ]]; then
+          REQUIRED_VERSION="1.38.0"
+          if ! semver -r ">${REQUIRED_VERSION}" "${CLI_VERSION}"; then
+            echo "Wait time option requires Astro CLI version $REQUIRED_VERSION or higher"
             exit 1
           fi
         fi
@@ -227,7 +239,11 @@ runs:
           REQUIRED_WAIT_VERSION="1.37.0"
 
           if command -v semver >/dev/null 2>&1 && [[ -n "$CLI_VERSION" ]] && semver -r ">=${REQUIRED_WAIT_VERSION}" "$CLI_VERSION" >/dev/null 2>&1; then
-            astro deployment create --wait --deployment-file deployment-preview-template.yaml
+            if [[ "${{ inputs.wait-time }}" != "" ]]; then
+              astro deployment create --wait --deployment-file deployment-preview-template.yaml --wait-time "${{ inputs.wait-time }}"
+            else
+              astro deployment create --wait --deployment-file deployment-preview-template.yaml
+            fi
           else
             if ! command -v semver >/dev/null 2>&1; then
               echo "semver CLI not available; continuing without deployment create --wait"
@@ -536,7 +552,11 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --dags ${{steps.deploy-options.outputs.OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
         echo ::endgroup::
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
@@ -550,7 +570,11 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}}
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
         echo ::endgroup::
       shell: bash
     - name: DBT Deploy to Astro
@@ -563,7 +587,11 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
+        fi
         echo ::endgroup::
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools
