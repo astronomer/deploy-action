@@ -755,7 +755,7 @@ jobs:
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          curl -sSL https://install.astronomer.io | sudo bash -s -- v1.38.0
 
           test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
           echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
