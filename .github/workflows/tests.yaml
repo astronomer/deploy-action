@@ -777,6 +777,7 @@ jobs:
           copy-airflow-variables: false
           copy-pools: false
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-create-preview
@@ -824,6 +825,7 @@ jobs:
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-deploy-preview
@@ -872,6 +874,7 @@ jobs:
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get Deployment Info After DAG Deploy Test
         id: get-deployment-after-dag-deploy
@@ -912,6 +915,7 @@ jobs:
           root-folder: e2e-setup/dbt
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
