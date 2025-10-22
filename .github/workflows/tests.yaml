@@ -778,6 +778,7 @@ jobs:
           copy-pools: false
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           wait-time: 300s
+          cli-version: 1.38.0
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-create-preview
@@ -826,6 +827,7 @@ jobs:
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           wait-time: 300s
+          cli-version: 1.38.0
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-deploy-preview
@@ -875,6 +877,7 @@ jobs:
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           wait-time: 300s
+          cli-version: 1.38.0
 
       - name: Get Deployment Info After DAG Deploy Test
         id: get-deployment-after-dag-deploy
@@ -916,6 +919,7 @@ jobs:
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           wait-time: 300s
+          cli-version: 1.38.0
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
