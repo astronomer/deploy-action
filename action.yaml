@@ -151,7 +151,7 @@ runs:
         # Check if the Astro CLI version is less than 1.38.0 for wait-time option
         if [[ "${{ inputs.wait-time }}" != "" && $CLI_VERSION != "" ]]; then
           REQUIRED_VERSION="1.38.0"
-          if ! semver -r ">${REQUIRED_VERSION}" "${CLI_VERSION}"; then
+          if ! semver -r ">=${REQUIRED_VERSION}" "${CLI_VERSION}"; then
             echo "Wait time option requires Astro CLI version $REQUIRED_VERSION or higher"
             exit 1
           fi
