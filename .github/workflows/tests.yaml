@@ -777,7 +777,7 @@ jobs:
           copy-airflow-variables: false
           copy-pools: false
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wait-time: 600s
           cli-version: 1.38.0
 
       - name: Get Deployment Info After Test
