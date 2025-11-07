@@ -68,6 +68,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
 | `cli-version` | `` | The desired Astro CLI version to use. The latest version is used if left unset. |
+| `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
 
 
 ## Outputs
@@ -122,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.10.1
+      uses: astronomer/deploy-action@v0.11.0
       with:
         deployment-id: <deployment id>
         parse: true
@@ -137,7 +138,7 @@ In the following example, the folder `/example-dags/` is specified as the root f
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.1
+  uses: astronomer/deploy-action@v0.11.0
   with:
     deployment-id: <deployment id>
     root-folder: /example-dags/
@@ -150,7 +151,7 @@ In the following example, the pytest located at `/tests/test-tags.py` runs befor
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.1
+  uses: astronomer/deploy-action@v0.11.0
   with:
     deployment-id: <deployment id>
     pytest: true
@@ -164,7 +165,7 @@ In the following example, `force` is enabled and both the DAG parse and pytest p
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.1
+  uses: astronomer/deploy-action@v0.11.0
   with:
     deployment-id: <deployment id>
     force: true
@@ -207,7 +208,7 @@ jobs:
         build-args: |
           <your-build-arguments>
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.10.1
+      uses: astronomer/deploy-action@v0.11.0
       with:
         deployment-id: <deployment id>
         deploy-type: image-and-dags
@@ -222,7 +223,7 @@ In the following example we would be deploying the dbt project located at `dbt` 
 ```yaml
 steps:
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.1
+  uses: astronomer/deploy-action@v0.11.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
@@ -236,7 +237,7 @@ In the following example we would setup a workflow to deploy dags/images located
 ```yaml
 steps:
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.1
+  uses: astronomer/deploy-action@v0.11.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
@@ -256,7 +257,7 @@ In the following example, the deployment is woken up from hibernation before dep
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.1
+  uses: astronomer/deploy-action@v0.11.0
   with:
     deployment-id: <deployment id>
     wake-on-deploy: true
@@ -292,10 +293,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.10.1
+      uses: astronomer/deploy-action@v0.11.0
       with:
         action: create-deployment-preview
         deployment-id: <orginal deployment id>
+        wait-time: 10m
 ```
 
 ## Deploy to Deployment Preview
@@ -317,7 +319,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.10.1
+      uses: astronomer/deploy-action@v0.11.0
       with:
         action: deploy-deployment-preview
         deployment-id: <orginal deployment id>
@@ -342,7 +344,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.10.1
+      uses: astronomer/deploy-action@v0.11.0
       with:
         action: deploy-deployment-preview
         deploy-type: dbt
@@ -369,7 +371,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Delete Deployment Preview
-      uses: astronomer/deploy-action@v0.10.1
+      uses: astronomer/deploy-action@v0.11.0
       with:
         action: delete-deployment-preview
         deployment-id: <orginal deployment id>
@@ -394,7 +396,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.10.1
+      uses: astronomer/deploy-action@v0.11.0
       with:
         deployment-id: <orginal deployment id>
 ```
