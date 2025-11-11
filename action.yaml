@@ -430,10 +430,7 @@ runs:
                 break
               fi
             elif [[ ${{ inputs.deploy-type }} == 'dags-only' ]]; then
-              if [[ $file == *"dags/"* ]]; then
-                echo $file is part of dags folder
-                DAGS_ONLY_DEPLOY=true
-              fi
+              DAGS_ONLY_DEPLOY=true
             elif [[ ${{ inputs.deploy-type }} == 'image-and-dags' ]]; then
               DAGS_ONLY_DEPLOY=false
               break
