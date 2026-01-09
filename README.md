@@ -34,7 +34,7 @@ To use this GitHub action, you need:
 
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
-1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.4`.
+1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.11.0`.
 2. Configure the workflow to fit your team's use case. This could include creating a deployment preview or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
 3. Make changes to your Astro project files in GitHub and let this GitHub Actions workflow take care of deploying your code to Astro.
 
@@ -191,12 +191,12 @@ jobs:
       ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
     steps:
     - name: Check out the repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
     - name: Create image tag
       id: image_tag
       run: echo ::set-output name=image_tag::astro-$(date +%Y%m%d%H%M%S)
     - name: Build image
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v6
       with:
         tags: ${{ steps.image_tag.outputs.image_tag }}
         load: true
@@ -243,7 +243,7 @@ steps:
     deploy-type: dbt
     root-folder: dbt
 - name: DAGs/Image Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.11.0
   with:
     deployment-id: <deployment id>
     root-folder: astro-project/
@@ -296,7 +296,7 @@ jobs:
       uses: astronomer/deploy-action@v0.11.0
       with:
         action: create-deployment-preview
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
         wait-time: 10m
 ```
 
@@ -322,7 +322,7 @@ jobs:
       uses: astronomer/deploy-action@v0.11.0
       with:
         action: deploy-deployment-preview
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
 ```
 
 ## DBT Deploy to Deployment Preview
@@ -348,7 +348,7 @@ jobs:
       with:
         action: deploy-deployment-preview
         deploy-type: dbt
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
         root-folder: dbt
 ```
 
@@ -374,7 +374,7 @@ jobs:
       uses: astronomer/deploy-action@v0.11.0
       with:
         action: delete-deployment-preview
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
 ```
 
 ## Deploy to Original Deployment
@@ -398,5 +398,5 @@ jobs:
     - name: Deploy to Astro
       uses: astronomer/deploy-action@v0.11.0
       with:
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
 ```
