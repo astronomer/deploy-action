@@ -486,7 +486,7 @@ runs:
         fi
 
         # add custom image option
-        if [[ ${{ inputs.image-name }} != no-custom-image && inputs.deploy-type != "dags-only" ]]; then
+        if [[ ${{ inputs.image-name }} != no-custom-image && ${{ inputs.deploy-type }} != "dags-only" ]]; then
           options="$options --image-name ${{ inputs.image-name }}"
         fi
 
