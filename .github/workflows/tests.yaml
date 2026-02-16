@@ -13,7 +13,7 @@ jobs:
     environment: e2e-test
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Redact Inputs
         run: |
@@ -42,7 +42,7 @@ jobs:
       HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -98,7 +98,7 @@ jobs:
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -189,7 +189,7 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -271,7 +271,7 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -359,7 +359,7 @@ jobs:
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -450,7 +450,7 @@ jobs:
         deploy_type: [infer, dbt, dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -563,7 +563,7 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -646,7 +646,7 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -733,7 +733,7 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -984,7 +984,7 @@ jobs:
     if: always()
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
