@@ -200,12 +200,18 @@ runs:
         # Direct download: supports internal mirrors and installs without sudo.
         # When astro-cli-download-url is set, the binary is fetched from that URL
         # and placed in install-path; no elevated privileges are required.
+        # Supports both raw binaries and .tar.gz archives (GitHub Releases format).
         if [[ -n "${{ inputs.astro-cli-download-url }}" ]]; then
+          DOWNLOAD_URL="${{ inputs.astro-cli-download-url }}"
           INSTALL_DIR="${{ inputs.install-path }}"
           INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
           mkdir -p "${INSTALL_DIR}"
-          echo "Downloading Astro CLI from ${{ inputs.astro-cli-download-url }} to ${INSTALL_DIR}"
-          curl -sSL "${{ inputs.astro-cli-download-url }}" -o "${INSTALL_DIR}/astro"
+          echo "Downloading Astro CLI from ${DOWNLOAD_URL} to ${INSTALL_DIR}"
+          if [[ "${DOWNLOAD_URL}" == *.tar.gz ]]; then
+            curl -sSL "${DOWNLOAD_URL}" | tar -xz -C "${INSTALL_DIR}" astro
+          else
+            curl -sSL "${DOWNLOAD_URL}" -o "${INSTALL_DIR}/astro"
+          fi
           chmod +x "${INSTALL_DIR}/astro"
           export PATH="${INSTALL_DIR}:${PATH}"
           echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"

@@ -139,7 +139,10 @@ jobs:
 ```
 
 > [!NOTE]
-> The URL must point directly to the binary file for the target platform (e.g., the Linux amd64 build). It is downloaded as-is and made executable — no extraction or installer script is involved. Host the appropriate binary from the [Astro CLI GitHub Releases](https://github.com/astronomer/astro-cli/releases) on your mirror.
+> The standard installer (`install.astronomer.io`) requires root and makes two outbound requests: first to fetch a platform-detection script from `raw.githubusercontent.com`, then to download the binary from GitHub Releases. `astro-cli-download-url` bypasses both hops.
+>
+> The URL must point directly to the **pre-built binary for your runner's platform** (e.g., the Linux amd64 build). It is downloaded as-is and made executable — no installer script or archive extraction is involved.
+> Find the correct binary for your platform in the [Astro CLI GitHub Releases](https://github.com/astronomer/astro-cli/releases) (e.g., `astro_<version>_linux_amd64` for a standard Ubuntu runner) and host it on your internal mirror.
 
 ### CLI resolution order
 
