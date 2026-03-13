@@ -101,6 +101,14 @@ inputs:
   wait-time:
     required: false
     description: "The time to wait for the deployment or deploy operation to finish successfully."
+  astro-cli-download-url:
+    required: false
+    default: ""
+    description: "Direct URL to download the Astro CLI binary. When set, the binary is downloaded from this URL instead of using the standard installer script. Supports internal mirrors and air-gapped environments. No sudo is required when this option is used."
+  install-path:
+    required: false
+    default: "~/.local/bin"
+    description: "Directory where the Astro CLI binary is installed when using 'astro-cli-download-url'. Defaults to '~/.local/bin'. The action adds this directory to PATH automatically. Has no effect when 'ASTRO_CLI_PATH' is set or when the CLI is already available in PATH."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -187,6 +195,22 @@ runs:
         # check if CLI_VERSION does not start with "v", then add "v" to it
         if [[ $CLI_VERSION != "" && $CLI_VERSION != v* ]]; then
           CLI_VERSION=v$CLI_VERSION
+        fi
+
+        # Direct download: supports internal mirrors and installs without sudo.
+        # When astro-cli-download-url is set, the binary is fetched from that URL
+        # and placed in install-path; no elevated privileges are required.
+        if [[ -n "${{ inputs.astro-cli-download-url }}" ]]; then
+          INSTALL_DIR="${{ inputs.install-path }}"
+          INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+          mkdir -p "${INSTALL_DIR}"
+          echo "Downloading Astro CLI from ${{ inputs.astro-cli-download-url }} to ${INSTALL_DIR}"
+          curl -sSL "${{ inputs.astro-cli-download-url }}" -o "${INSTALL_DIR}/astro"
+          chmod +x "${INSTALL_DIR}/astro"
+          export PATH="${INSTALL_DIR}:${PATH}"
+          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+          echo ::endgroup::
+          exit 0
         fi
 
         if [[ $CLI_VERSION == "" ]]; then
