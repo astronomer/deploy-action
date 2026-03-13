@@ -69,7 +69,89 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
 | `cli-version` | `` | The desired Astro CLI version to use. The latest version is used if left unset. |
 | `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
+| `astro-cli-download-url` | `` | Direct URL to download the Astro CLI binary. When set, the binary is fetched from this URL instead of the standard `install.astronomer.io` installer. Useful for internal mirrors. No `sudo` is required. |
+| `install-path` | `~/.local/bin` | Directory where the CLI binary is placed when `astro-cli-download-url` is used. The action adds this directory to `PATH` automatically. Has no effect when `ASTRO_CLI_PATH` is set or when the CLI is already in `PATH`. |
 
+
+## Environment variables
+
+The following environment variables can be set on the job or step to control action behavior.
+
+| Name | Description |
+| ---|--- |
+| `ASTRO_API_TOKEN` | **Required.** Astro API token used to authenticate with Astronomer. |
+| `ASTRO_CLI_PATH` | Absolute path to a pre-installed Astro CLI binary on the runner. When set, the action uses this binary directly and skips downloading the CLI. Useful for air-gapped runners without internet access. The binary must be executable; if its filename is not `astro`, a symlink is created automatically. |
+
+### Air-gapped runners — pre-installed binary
+
+If your runner has no internet access but already has the Astro CLI binary pre-installed (or baked into the runner image), point the action to it via `ASTRO_CLI_PATH`. The action will use that binary directly and skip any download attempt.
+
+```yaml
+name: Astronomer CI - Deploy code (air-gapped, pre-installed CLI)
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+  # Absolute path to the Astro CLI binary pre-installed on this runner
+  ASTRO_CLI_PATH: /opt/tools/astro
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+    - name: Deploy to Astro
+      uses: astronomer/deploy-action@v0.11.1
+      with:
+        deployment-id: <deployment id>
+```
+
+### Internal mirror / no-sudo install
+
+If your organization requires all software to be fetched from an internal mirror, or if your runner does not have root/`sudo` access, use `astro-cli-download-url` to point the action at a URL that serves the pre-built CLI binary. The binary is downloaded with plain `curl` and placed in `install-path` (default: `~/.local/bin`). No `sudo` is required.
+
+```yaml
+name: Astronomer CI - Deploy code (internal mirror)
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+    - name: Deploy to Astro
+      uses: astronomer/deploy-action@v0.11.1
+      with:
+        deployment-id: <deployment id>
+        # URL to the pre-built Astro CLI binary hosted on your internal mirror
+        astro-cli-download-url: https://mirror.example.com/astro-cli/v1.29.0/astro_linux_amd64
+        # Optional: override the install directory (default: ~/.local/bin)
+        install-path: ~/.local/bin
+```
+
+> [!NOTE]
+> The standard installer (`install.astronomer.io`) requires root and makes two outbound requests: first to fetch a platform-detection script from `raw.githubusercontent.com`, then to download the binary from GitHub Releases. `astro-cli-download-url` bypasses both hops.
+>
+> The URL must point directly to the **pre-built binary for your runner's platform** (e.g., the Linux amd64 build). It is downloaded as-is and made executable — no installer script or archive extraction is involved.
+> Find the correct binary for your platform in the [Astro CLI GitHub Releases](https://github.com/astronomer/astro-cli/releases) (e.g., `astro_<version>_linux_amd64` for a standard Ubuntu runner) and host it on your internal mirror.
+
+### CLI resolution order
+
+The action resolves the Astro CLI using the following priority:
+
+1. **`ASTRO_CLI_PATH` env var** — use a binary at a specific path (no download).
+2. **`astro` already in `PATH`** — use the pre-installed CLI (no download).
+3. **`astro-cli-download-url` input** — download the binary directly (no `sudo`).
+4. **Standard installer** — download via `https://install.astronomer.io` (requires `sudo`; use one of the options above if `sudo` is not available).
 
 ## Outputs
 

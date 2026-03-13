@@ -101,6 +101,14 @@ inputs:
   wait-time:
     required: false
     description: "The time to wait for the deployment or deploy operation to finish successfully."
+  astro-cli-download-url:
+    required: false
+    default: ""
+    description: "Direct URL to download the Astro CLI binary. When set, the binary is downloaded from this URL instead of using the standard installer script. Supports internal mirrors and air-gapped environments. No sudo is required when this option is used."
+  install-path:
+    required: false
+    default: "~/.local/bin"
+    description: "Directory where the Astro CLI binary is installed when using 'astro-cli-download-url'. Defaults to '~/.local/bin'. The action adds this directory to PATH automatically. Has no effect when 'ASTRO_CLI_PATH' is set or when the CLI is already available in PATH."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -126,10 +134,30 @@ runs:
       run: |
 
         echo ::group::Install Astro CLI
+
+        # If ASTRO_CLI_PATH is set, use that binary instead of downloading.
+        # This allows air-gapped runners to supply a pre-installed CLI binary.
+        if [[ -n "${ASTRO_CLI_PATH}" ]]; then
+          if [[ ! -f "${ASTRO_CLI_PATH}" ]]; then
+            echo "ERROR: ASTRO_CLI_PATH is set to '${ASTRO_CLI_PATH}' but the file does not exist."
+            exit 1
+          fi
+          echo "Using Astro CLI from ASTRO_CLI_PATH: ${ASTRO_CLI_PATH}"
+          chmod +x "${ASTRO_CLI_PATH}"
+          ASTRO_CLI_DIR="$(dirname "${ASTRO_CLI_PATH}")"
+          # If the binary is not named 'astro', create a symlink so 'astro' resolves correctly
+          if [[ "$(basename "${ASTRO_CLI_PATH}")" != "astro" ]]; then
+            ln -sf "${ASTRO_CLI_PATH}" "${ASTRO_CLI_DIR}/astro"
+          fi
+          # Make available in the current step and persist for all subsequent steps
+          export PATH="${ASTRO_CLI_DIR}:${PATH}"
+          echo "${ASTRO_CLI_DIR}" >> "${GITHUB_PATH}"
+        fi
+
         CLI_VERSION=${{ inputs.cli-version }}
-        # if Astro CLI is pre-installed, fetch it's version
+        # If Astro CLI is already available (via ASTRO_CLI_PATH or pre-installed in PATH), fetch its version
         if command -v astro &> /dev/null; then
-          # "astro version" commands returns the CLI version, its output is of the form: "Astro CLI Version: 1.29.0"
+          # "astro version" returns output of the form: "Astro CLI Version: 1.29.0"
           CLI_VERSION=$(astro version | awk '{print $4}')
         fi
 
@@ -157,15 +185,38 @@ runs:
           fi
         fi
 
-        # skip Astro CLI installation if already installed
+        # Skip installation if Astro CLI is already available (via ASTRO_CLI_PATH or pre-installed in PATH)
         if command -v astro &> /dev/null; then
-          echo "Astro CLI is already installed"
+          echo "Astro CLI is already installed, skipping installation"
+          echo ::endgroup::
           exit 0
         fi
 
-        # check if CLI_VERSION does not starts with "v", then add "v" to it
+        # check if CLI_VERSION does not start with "v", then add "v" to it
         if [[ $CLI_VERSION != "" && $CLI_VERSION != v* ]]; then
           CLI_VERSION=v$CLI_VERSION
+        fi
+
+        # Direct download: supports internal mirrors and installs without sudo.
+        # When astro-cli-download-url is set, the binary is fetched from that URL
+        # and placed in install-path; no elevated privileges are required.
+        # Supports both raw binaries and .tar.gz archives (GitHub Releases format).
+        if [[ -n "${{ inputs.astro-cli-download-url }}" ]]; then
+          DOWNLOAD_URL="${{ inputs.astro-cli-download-url }}"
+          INSTALL_DIR="${{ inputs.install-path }}"
+          INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+          mkdir -p "${INSTALL_DIR}"
+          echo "Downloading Astro CLI from ${DOWNLOAD_URL} to ${INSTALL_DIR}"
+          if [[ "${DOWNLOAD_URL}" == *.tar.gz ]]; then
+            curl -sSL "${DOWNLOAD_URL}" | tar -xz -C "${INSTALL_DIR}" astro
+          else
+            curl -sSL "${DOWNLOAD_URL}" -o "${INSTALL_DIR}/astro"
+          fi
+          chmod +x "${INSTALL_DIR}/astro"
+          export PATH="${INSTALL_DIR}:${PATH}"
+          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+          echo ::endgroup::
+          exit 0
         fi
 
         if [[ $CLI_VERSION == "" ]]; then
