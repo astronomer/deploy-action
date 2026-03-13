@@ -71,6 +71,44 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
 
 
+## Environment variables
+
+The following environment variables can be set on the job or step to control action behavior.
+
+| Name | Description |
+| ---|--- |
+| `ASTRO_API_TOKEN` | **Required.** Astro API token used to authenticate with Astronomer. |
+| `ASTRO_CLI_PATH` | Absolute path to a pre-installed Astro CLI binary on the runner. When set, the action uses this binary directly and skips downloading the CLI. Useful for air-gapped runners without internet access. The binary must be executable; if its filename is not `astro`, a symlink is created automatically. |
+
+### Air-gapped runners
+
+If your GitHub Actions runner does not have internet access, pre-install the Astro CLI binary on the runner (or bake it into a custom runner image) and point the action to it via `ASTRO_CLI_PATH`:
+
+```yaml
+name: Astronomer CI - Deploy code (air-gapped)
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+  # Absolute path to the Astro CLI binary pre-installed on this runner
+  ASTRO_CLI_PATH: /usr/local/bin/astro
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+    - name: Deploy to Astro
+      uses: astronomer/deploy-action@v0.11.1
+      with:
+        deployment-id: <deployment id>
+```
+
+When `ASTRO_CLI_PATH` is set and the file exists, the action adds its directory to `PATH` and skips the download step entirely.
+
 ## Outputs
 
 The following table lists the outputs for the Deploy to Astro action.
