@@ -8,12 +8,17 @@ on:
 # No Astro API credentials are required; all jobs use a fake astro binary.
 #
 # Code paths under test:
-#   1. ASTRO_CLI_PATH (binary named 'astro')
-#   2. ASTRO_CLI_PATH (binary with a different name → symlink created)
-#   3. ASTRO_CLI_PATH pointing to a missing file → must exit non-zero
-#   4. astro already in PATH → installation skipped
-#   5. astro-cli-download-url → raw binary fetched directly, no sudo
-#   6. astro-cli-download-url → .tar.gz archive fetched and extracted, no sudo
+#   1. ASTRO_CLI_PATH (binary named 'astro')       → symlink created in install-path
+#   2. ASTRO_CLI_PATH (binary with a different name) → symlink created in install-path
+#   3. ASTRO_CLI_PATH pointing to a missing file   → must exit non-zero
+#   4. astro already in PATH                        → installation skipped
+#   5. astro-cli-download-url: raw binary           → fetched directly, no sudo
+#   6. astro-cli-download-url: .tar.gz archive      → extracted directly, no sudo
+
+# Shared install logic for ASTRO_CLI_PATH tests (mirrors action.yaml exactly).
+# Always symlinks into install-path so write access to the binary's dir is never needed.
+env:
+  INSTALL_PATH: "${{ github.workspace }}/.local/bin"  # deterministic path for assertions
 
 jobs:
 
@@ -26,11 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create fake astro binary
+      - name: Create fake astro binary (pre-executable, as expected by the action)
         run: |
           mkdir -p /tmp/test-bin
           printf '#!/bin/bash\necho "Astro CLI Version: 1.99.0"\n' > /tmp/test-bin/astro
-          chmod +x /tmp/test-bin/astro
+          chmod +x /tmp/test-bin/astro  # caller's responsibility
 
       - name: Run install step logic
         env:
@@ -38,50 +43,48 @@ jobs:
         run: |
           set -euo pipefail
 
-          # --- begin: copied install logic (inputs substituted with test values) ---
           if [[ -n "${ASTRO_CLI_PATH}" ]]; then
             if [[ ! -f "${ASTRO_CLI_PATH}" ]]; then
               echo "ERROR: ASTRO_CLI_PATH is set to '${ASTRO_CLI_PATH}' but the file does not exist."
               exit 1
             fi
             echo "Using Astro CLI from ASTRO_CLI_PATH: ${ASTRO_CLI_PATH}"
-            chmod +x "${ASTRO_CLI_PATH}"
-            ASTRO_CLI_DIR="$(dirname "${ASTRO_CLI_PATH}")"
-            if [[ "$(basename "${ASTRO_CLI_PATH}")" != "astro" ]]; then
-              ln -sf "${ASTRO_CLI_PATH}" "${ASTRO_CLI_DIR}/astro"
-            fi
-            export PATH="${ASTRO_CLI_DIR}:${PATH}"
-            echo "${ASTRO_CLI_DIR}" >> "${GITHUB_PATH}"
+            INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
+            mkdir -p "${INSTALL_DIR}"
+            ln -sf "${ASTRO_CLI_PATH}" "${INSTALL_DIR}/astro"
+            export PATH="${INSTALL_DIR}:${PATH}"
+            echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
           fi
 
           if command -v astro &> /dev/null; then
             echo "Astro CLI is already installed, skipping installation"
             exit 0
           fi
-          # --- end: copied install logic ---
 
           echo "ERROR: astro not found in PATH after ASTRO_CLI_PATH handling"
           exit 1
 
-      - name: Verify astro resolves correctly in subsequent step
+      - name: Verify symlink in install-path resolves correctly in subsequent step
         run: |
+          test -L "${INSTALL_PATH}/astro"
+          test "$(readlink "${INSTALL_PATH}/astro")" = "/tmp/test-bin/astro"
           which astro
           astro version | grep "1.99.0"
 
   # ---------------------------------------------------------------------------
-  # 2. ASTRO_CLI_PATH points to a binary NOT named 'astro' → symlink must be created
+  # 2. ASTRO_CLI_PATH points to a binary NOT named 'astro'
   # ---------------------------------------------------------------------------
   test-astro-cli-path-non-astro-name:
-    name: "ASTRO_CLI_PATH: binary with non-astro filename (symlink created)"
+    name: "ASTRO_CLI_PATH: binary with non-astro filename"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create fake binary with non-standard name
+      - name: Create fake binary with non-standard name (pre-executable, as expected by the action)
         run: |
           mkdir -p /tmp/test-bin
           printf '#!/bin/bash\necho "Astro CLI Version: 1.99.0"\n' > /tmp/test-bin/astro-cli-linux-amd64
-          chmod +x /tmp/test-bin/astro-cli-linux-amd64
+          chmod +x /tmp/test-bin/astro-cli-linux-amd64  # caller's responsibility
 
       - name: Run install step logic
         env:
@@ -95,13 +98,11 @@ jobs:
               exit 1
             fi
             echo "Using Astro CLI from ASTRO_CLI_PATH: ${ASTRO_CLI_PATH}"
-            chmod +x "${ASTRO_CLI_PATH}"
-            ASTRO_CLI_DIR="$(dirname "${ASTRO_CLI_PATH}")"
-            if [[ "$(basename "${ASTRO_CLI_PATH}")" != "astro" ]]; then
-              ln -sf "${ASTRO_CLI_PATH}" "${ASTRO_CLI_DIR}/astro"
-            fi
-            export PATH="${ASTRO_CLI_DIR}:${PATH}"
-            echo "${ASTRO_CLI_DIR}" >> "${GITHUB_PATH}"
+            INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
+            mkdir -p "${INSTALL_DIR}"
+            ln -sf "${ASTRO_CLI_PATH}" "${INSTALL_DIR}/astro"
+            export PATH="${INSTALL_DIR}:${PATH}"
+            echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
           fi
 
           if command -v astro &> /dev/null; then
@@ -112,9 +113,10 @@ jobs:
           echo "ERROR: astro not found in PATH after ASTRO_CLI_PATH handling"
           exit 1
 
-      - name: Verify symlink was created and astro resolves
+      - name: Verify symlink in install-path points to the original binary
         run: |
-          test -L /tmp/test-bin/astro
+          test -L "${INSTALL_PATH}/astro"
+          test "$(readlink "${INSTALL_PATH}/astro")" = "/tmp/test-bin/astro-cli-linux-amd64"
           which astro
           astro version | grep "1.99.0"
 
@@ -168,8 +170,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # No ASTRO_CLI_PATH set; astro is already in PATH
-
           INSTALL_SKIPPED=false
           if command -v astro &> /dev/null; then
             echo "Astro CLI is already installed, skipping installation"
@@ -185,7 +185,7 @@ jobs:
         run: astro version | grep "1.99.0"
 
   # ---------------------------------------------------------------------------
-  # 5. astro-cli-download-url: binary fetched directly (no sudo)
+  # 5. astro-cli-download-url: raw binary fetched directly (no sudo)
   # ---------------------------------------------------------------------------
   test-download-url:
     name: "astro-cli-download-url: direct binary download"
@@ -202,8 +202,6 @@ jobs:
       - name: Run install step logic with astro-cli-download-url
         # Server is started and torn down within the same step so the background
         # process is guaranteed to be alive when curl runs.
-        env:
-          INPUT_INSTALL_PATH: "~/.local/bin"
         run: |
           set -euo pipefail
 
@@ -212,8 +210,7 @@ jobs:
           sleep 1   # give server time to bind
 
           DOWNLOAD_URL="http://localhost:18080/astro"
-          INSTALL_DIR="${INPUT_INSTALL_PATH}"
-          INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+          INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
           mkdir -p "${INSTALL_DIR}"
           echo "Downloading Astro CLI from ${DOWNLOAD_URL} to ${INSTALL_DIR}"
           curl -sSL "${DOWNLOAD_URL}" -o "${INSTALL_DIR}/astro"
@@ -262,8 +259,6 @@ jobs:
           tar -czf /tmp/mirror-tar-serve/astro_1.99.0_linux_amd64.tar.gz -C /tmp/mirror-tar astro
 
       - name: Run install step logic with .tar.gz astro-cli-download-url
-        env:
-          INPUT_INSTALL_PATH: "~/.local/bin"
         run: |
           set -euo pipefail
 
@@ -272,8 +267,7 @@ jobs:
           sleep 1
 
           DOWNLOAD_URL="http://localhost:18081/astro_1.99.0_linux_amd64.tar.gz"
-          INSTALL_DIR="${INPUT_INSTALL_PATH}"
-          INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+          INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
           mkdir -p "${INSTALL_DIR}"
           echo "Downloading Astro CLI from ${DOWNLOAD_URL} to ${INSTALL_DIR}"
           if [[ "${DOWNLOAD_URL}" == *.tar.gz ]]; then
