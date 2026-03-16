@@ -136,7 +136,7 @@ jobs:
 ```
 
 > [!NOTE]
-> The standard installer calls `godownloader.sh` from `raw.githubusercontent.com` and downloads the binary from GitHub Releases — two outbound requests. `astro-cli-download-url` bypasses both hops, making it suitable for air-gapped environments.
+> The standard installer calls `godownloader.sh` from `https://raw.githubusercontent.com/astronomer/astro-cli/main` and downloads the binary from GitHub Releases — two outbound requests. `astro-cli-download-url` bypasses both hops, making it suitable for air-gapped environments.
 >
 > The URL must point to the **pre-built binary or `.tar.gz` archive for your runner's platform** (e.g., the Linux amd64 build). Both formats are detected automatically: `.tar.gz` archives are extracted with `tar`, raw binaries are saved directly. No installer script is involved.
 > Find the correct asset for your platform in the [Astro CLI GitHub Releases](https://github.com/astronomer/astro-cli/releases) (e.g., `astro_<version>_linux_amd64.tar.gz` for a standard Ubuntu runner) and host it on your internal mirror.
