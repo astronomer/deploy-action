@@ -1,0 +1,295 @@
+name: Unit Tests - CLI Installation Logic
+
+on:
+  push:
+  workflow_dispatch:
+
+# Each job isolates one code path in the "Install Astro CLI" step of action.yaml.
+# No Astro API credentials are required; all jobs use a fake astro binary.
+#
+# Code paths under test:
+#   1. ASTRO_CLI_PATH (binary named 'astro')       → symlink created in install-path
+#   2. ASTRO_CLI_PATH (binary with a different name) → symlink created in install-path
+#   3. ASTRO_CLI_PATH pointing to a missing file   → must exit non-zero
+#   4. astro already in PATH                        → installation skipped
+#   5. astro-cli-download-url: raw binary           → fetched directly, no sudo
+#   6. astro-cli-download-url: .tar.gz archive      → extracted directly, no sudo
+
+# Shared install logic for ASTRO_CLI_PATH tests (mirrors action.yaml exactly).
+# Always symlinks into install-path so write access to the binary's dir is never needed.
+env:
+  INSTALL_PATH: "${{ github.workspace }}/.local/bin"  # deterministic path for assertions
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # 1. ASTRO_CLI_PATH set to a binary already named 'astro'
+  # ---------------------------------------------------------------------------
+  test-astro-cli-path-named-astro:
+    name: "ASTRO_CLI_PATH: binary named astro"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake astro binary (pre-executable, as expected by the action)
+        run: |
+          mkdir -p /tmp/test-bin
+          printf '#!/bin/bash\necho "Astro CLI Version: 1.99.0"\n' > /tmp/test-bin/astro
+          chmod +x /tmp/test-bin/astro  # caller's responsibility
+
+      - name: Run install step logic
+        env:
+          ASTRO_CLI_PATH: /tmp/test-bin/astro
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${ASTRO_CLI_PATH}" ]]; then
+            if [[ ! -f "${ASTRO_CLI_PATH}" ]]; then
+              echo "ERROR: ASTRO_CLI_PATH is set to '${ASTRO_CLI_PATH}' but the file does not exist."
+              exit 1
+            fi
+            echo "Using Astro CLI from ASTRO_CLI_PATH: ${ASTRO_CLI_PATH}"
+            INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
+            mkdir -p "${INSTALL_DIR}"
+            ln -sf "${ASTRO_CLI_PATH}" "${INSTALL_DIR}/astro"
+            export PATH="${INSTALL_DIR}:${PATH}"
+            echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+          fi
+
+          if command -v astro &> /dev/null; then
+            echo "Astro CLI is already installed, skipping installation"
+            exit 0
+          fi
+
+          echo "ERROR: astro not found in PATH after ASTRO_CLI_PATH handling"
+          exit 1
+
+      - name: Verify symlink in install-path resolves correctly in subsequent step
+        run: |
+          test -L "${INSTALL_PATH}/astro"
+          test "$(readlink "${INSTALL_PATH}/astro")" = "/tmp/test-bin/astro"
+          which astro
+          astro version | grep "1.99.0"
+
+  # ---------------------------------------------------------------------------
+  # 2. ASTRO_CLI_PATH points to a binary NOT named 'astro'
+  # ---------------------------------------------------------------------------
+  test-astro-cli-path-non-astro-name:
+    name: "ASTRO_CLI_PATH: binary with non-astro filename"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake binary with non-standard name (pre-executable, as expected by the action)
+        run: |
+          mkdir -p /tmp/test-bin
+          printf '#!/bin/bash\necho "Astro CLI Version: 1.99.0"\n' > /tmp/test-bin/astro-cli-linux-amd64
+          chmod +x /tmp/test-bin/astro-cli-linux-amd64  # caller's responsibility
+
+      - name: Run install step logic
+        env:
+          ASTRO_CLI_PATH: /tmp/test-bin/astro-cli-linux-amd64
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${ASTRO_CLI_PATH}" ]]; then
+            if [[ ! -f "${ASTRO_CLI_PATH}" ]]; then
+              echo "ERROR: ASTRO_CLI_PATH is set to '${ASTRO_CLI_PATH}' but the file does not exist."
+              exit 1
+            fi
+            echo "Using Astro CLI from ASTRO_CLI_PATH: ${ASTRO_CLI_PATH}"
+            INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
+            mkdir -p "${INSTALL_DIR}"
+            ln -sf "${ASTRO_CLI_PATH}" "${INSTALL_DIR}/astro"
+            export PATH="${INSTALL_DIR}:${PATH}"
+            echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+          fi
+
+          if command -v astro &> /dev/null; then
+            echo "Astro CLI is already installed, skipping installation"
+            exit 0
+          fi
+
+          echo "ERROR: astro not found in PATH after ASTRO_CLI_PATH handling"
+          exit 1
+
+      - name: Verify symlink in install-path points to the original binary
+        run: |
+          test -L "${INSTALL_PATH}/astro"
+          test "$(readlink "${INSTALL_PATH}/astro")" = "/tmp/test-bin/astro-cli-linux-amd64"
+          which astro
+          astro version | grep "1.99.0"
+
+  # ---------------------------------------------------------------------------
+  # 3. ASTRO_CLI_PATH points to a non-existent file → step must fail
+  # ---------------------------------------------------------------------------
+  test-astro-cli-path-missing-file:
+    name: "ASTRO_CLI_PATH: missing file → must exit non-zero"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run install step logic (expect failure)
+        id: install
+        env:
+          ASTRO_CLI_PATH: /tmp/does-not-exist/astro
+        run: |
+          if [[ -n "${ASTRO_CLI_PATH}" ]]; then
+            if [[ ! -f "${ASTRO_CLI_PATH}" ]]; then
+              echo "ERROR: ASTRO_CLI_PATH is set to '${ASTRO_CLI_PATH}' but the file does not exist."
+              exit 1
+            fi
+          fi
+        continue-on-error: true
+
+      - name: Assert step failed
+        run: |
+          if [[ "${{ steps.install.outcome }}" != "failure" ]]; then
+            echo "ERROR: expected install step to fail for missing ASTRO_CLI_PATH, but it succeeded"
+            exit 1
+          fi
+          echo "PASS: install step correctly failed for missing ASTRO_CLI_PATH"
+
+  # ---------------------------------------------------------------------------
+  # 4. astro already in PATH → installation must be skipped
+  # ---------------------------------------------------------------------------
+  test-already-in-path:
+    name: "astro already in PATH: installation skipped"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Place fake astro binary in PATH
+        run: |
+          mkdir -p /tmp/test-bin
+          printf '#!/bin/bash\necho "Astro CLI Version: 1.99.0"\n' > /tmp/test-bin/astro
+          chmod +x /tmp/test-bin/astro
+          echo /tmp/test-bin >> "$GITHUB_PATH"
+
+      - name: Run install step logic
+        run: |
+          set -euo pipefail
+
+          INSTALL_SKIPPED=false
+          if command -v astro &> /dev/null; then
+            echo "Astro CLI is already installed, skipping installation"
+            INSTALL_SKIPPED=true
+          fi
+
+          if [[ "$INSTALL_SKIPPED" != "true" ]]; then
+            echo "ERROR: expected installation to be skipped, but it was not"
+            exit 1
+          fi
+
+      - name: Verify astro version
+        run: astro version | grep "1.99.0"
+
+  # ---------------------------------------------------------------------------
+  # 5. astro-cli-download-url: raw binary fetched directly (no sudo)
+  # ---------------------------------------------------------------------------
+  test-download-url:
+    name: "astro-cli-download-url: direct binary download"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake astro binary and serve it over HTTP
+        run: |
+          mkdir -p /tmp/mirror
+          printf '#!/bin/bash\necho "Astro CLI Version: 1.99.0"\n' > /tmp/mirror/astro
+          chmod +x /tmp/mirror/astro
+
+      - name: Run install step logic with astro-cli-download-url
+        # Server is started and torn down within the same step so the background
+        # process is guaranteed to be alive when curl runs.
+        run: |
+          set -euo pipefail
+
+          python3 -m http.server 18080 --directory /tmp/mirror &
+          HTTP_SERVER_PID=$!
+          sleep 1   # give server time to bind
+
+          DOWNLOAD_URL="http://localhost:18080/astro"
+          INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
+          mkdir -p "${INSTALL_DIR}"
+          echo "Downloading Astro CLI from ${DOWNLOAD_URL} to ${INSTALL_DIR}"
+          curl -sSL "${DOWNLOAD_URL}" -o "${INSTALL_DIR}/astro"
+          chmod +x "${INSTALL_DIR}/astro"
+          export PATH="${INSTALL_DIR}:${PATH}"
+          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+
+          kill "${HTTP_SERVER_PID}" 2>/dev/null || true
+
+          if command -v astro &> /dev/null; then
+            echo "Astro CLI installed successfully via direct download"
+            exit 0
+          fi
+
+          echo "ERROR: astro not found in PATH after direct download"
+          exit 1
+
+      - name: Verify astro resolves in subsequent step
+        run: |
+          which astro
+          astro version | grep "1.99.0"
+
+      - name: Verify no sudo was used
+        run: |
+          ASTRO_PATH="$(which astro)"
+          if [[ "${ASTRO_PATH}" == "/usr/local/bin/astro" || "${ASTRO_PATH}" == "/usr/bin/astro" ]]; then
+            echo "ERROR: astro resolved to a system path (${ASTRO_PATH}); expected user-local path"
+            exit 1
+          fi
+          echo "PASS: astro installed to user-local path: ${ASTRO_PATH}"
+
+  # ---------------------------------------------------------------------------
+  # 6. astro-cli-download-url: .tar.gz archive fetched and extracted
+  # ---------------------------------------------------------------------------
+  test-download-url-tarball:
+    name: "astro-cli-download-url: .tar.gz archive extracted"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fake astro binary, pack it as .tar.gz, and serve over HTTP
+        run: |
+          mkdir -p /tmp/mirror-tar /tmp/mirror-tar-serve
+          printf '#!/bin/bash\necho "Astro CLI Version: 1.99.0"\n' > /tmp/mirror-tar/astro
+          chmod +x /tmp/mirror-tar/astro
+          tar -czf /tmp/mirror-tar-serve/astro_1.99.0_linux_amd64.tar.gz -C /tmp/mirror-tar astro
+
+      - name: Run install step logic with .tar.gz astro-cli-download-url
+        run: |
+          set -euo pipefail
+
+          python3 -m http.server 18081 --directory /tmp/mirror-tar-serve &
+          HTTP_SERVER_PID=$!
+          sleep 1
+
+          DOWNLOAD_URL="http://localhost:18081/astro_1.99.0_linux_amd64.tar.gz"
+          INSTALL_DIR="${INSTALL_PATH/#\~/$HOME}"
+          mkdir -p "${INSTALL_DIR}"
+          echo "Downloading Astro CLI from ${DOWNLOAD_URL} to ${INSTALL_DIR}"
+          if [[ "${DOWNLOAD_URL}" == *.tar.gz ]]; then
+            curl -sSL "${DOWNLOAD_URL}" | tar -xz -C "${INSTALL_DIR}" astro
+          else
+            curl -sSL "${DOWNLOAD_URL}" -o "${INSTALL_DIR}/astro"
+          fi
+          chmod +x "${INSTALL_DIR}/astro"
+          export PATH="${INSTALL_DIR}:${PATH}"
+          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+
+          kill "${HTTP_SERVER_PID}" 2>/dev/null || true
+
+          if command -v astro &> /dev/null; then
+            echo "Astro CLI installed successfully via .tar.gz download"
+            exit 0
+          fi
+
+          echo "ERROR: astro not found in PATH after .tar.gz download"
+          exit 1
+
+      - name: Verify astro resolves in subsequent step
+        run: |
+          which astro
+          astro version | grep "1.99.0"
