@@ -130,7 +130,7 @@ runs:
           echo "ERROR: Astro CLI is not installed or not in PATH."
           echo "Install it before calling this action:"
           echo ""
-          echo "  - uses: astronomer/setup-astro-cli@v1"
+          echo "  - uses: astronomer/setup-astro-cli"
           echo ""
           exit 1
         fi
