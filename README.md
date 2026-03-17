@@ -11,12 +11,24 @@ You can use and configure this GitHub action to easily deploy Apache Airflow DAG
 This GitHub action runs as a step within a GitHub workflow file. When your CI/CD pipeline is triggered, this action:
 
 - Checks out your GitHub repository.
+- Verifies that the Astro CLI is available (installed via `astronomer/setup-astro-cli` or pre-installed).
 - Optionally creates or deletes a Deployment Preview to test your code changes on before deploying to production.
 - Checks whether your commit only changed DAG code.
 - Optional. Tests DAG code with `pytest`. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest).
 - Either runs:
   - `astro deploy --dags` if the commit only includes DAG code changes,
   - or `astro deploy` (as well as `astro dev parse`) if the commit includes _any_ non-DAG-code-related changes.
+
+## CLI Installation
+
+As of v1.0, the Astro CLI installation has been separated into its own action: [`astronomer/setup-astro-cli`](https://github.com/astronomer/setup-astro-cli). This separation provides:
+
+- Independent control over CLI versions across different workflows
+- Simplified upgrade paths for the CLI in CI/CD environments
+- Ability to reuse a single CLI installation across multiple deploy steps
+- Cleaner separation of concerns between installation and deployment logic
+
+You must install the Astro CLI before using `deploy-action`. See the [`astronomer/setup-astro-cli`](https://github.com/astronomer/setup-astro-cli) documentation for details.
 
 ## Prerequisites
 
@@ -67,9 +79,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `mount-path` | `` | Path to mount dbt project in Airflow, for reference by DAGs. Default /usr/local/airflow/dbt/{dbt project name} |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
-| `cli-version` | `` | The desired Astro CLI version to use. The latest version is used if left unset. |
 | `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
-| `astro-cli-download-url` | `` | Direct URL to download the Astro CLI binary. When set, the binary is fetched from this URL instead of the standard installer, and placed in `~/.local/bin`. Useful for internal mirrors and air-gapped runners. Both raw binaries and `.tar.gz` archives are supported. |
 
 
 ## Environment variables
@@ -79,76 +89,6 @@ The following environment variables can be set on the job or step to control act
 | Name | Description |
 | ---|--- |
 | `ASTRO_API_TOKEN` | **Required.** Astro API token used to authenticate with Astronomer. |
-| `ASTRO_CLI_PATH` | Absolute path to a pre-installed Astro CLI binary on the runner. When set, the action uses this binary directly and skips downloading the CLI. Useful for air-gapped runners without internet access. The binary must be executable. A symlink is always created at `~/.local/bin/astro` pointing to this path. |
-
-### Air-gapped runners — pre-installed binary
-
-If your runner has no internet access but already has the Astro CLI binary pre-installed (or baked into the runner image), point the action to it via `ASTRO_CLI_PATH`. The action will use that binary directly and skip any download attempt.
-
-```yaml
-name: Astronomer CI - Deploy code (air-gapped, pre-installed CLI)
-
-on:
-  push:
-    branches:
-      - main
-
-env:
-  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
-  # Absolute path to the Astro CLI binary pre-installed on this runner
-  ASTRO_CLI_PATH: /opt/tools/astro
-
-jobs:
-  deploy:
-    runs-on: self-hosted
-    steps:
-    - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.11.1
-      with:
-        deployment-id: <deployment id>
-```
-
-### Internal mirror install
-
-If your organization requires all software to be fetched from an internal mirror, use `astro-cli-download-url` to point the action at a URL that serves the pre-built CLI binary. The binary is downloaded with plain `curl` and placed in `~/.local/bin`.
-
-```yaml
-name: Astronomer CI - Deploy code (internal mirror)
-
-on:
-  push:
-    branches:
-      - main
-
-env:
-  ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
-
-jobs:
-  deploy:
-    runs-on: self-hosted
-    steps:
-    - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.11.1
-      with:
-        deployment-id: <deployment id>
-        # URL to the pre-built Astro CLI binary hosted on your internal mirror
-        astro-cli-download-url: https://mirror.example.com/astro-cli/v1.29.0/astro_linux_amd64
-```
-
-> [!NOTE]
-> The standard installer calls `godownloader.sh` from `https://raw.githubusercontent.com/astronomer/astro-cli/main` and downloads the binary from GitHub Releases — two outbound requests. `astro-cli-download-url` bypasses both hops, making it suitable for air-gapped environments.
->
-> The URL must point to the **pre-built binary or `.tar.gz` archive for your runner's platform** (e.g., the Linux amd64 build). Both formats are detected automatically: `.tar.gz` archives are extracted with `tar`, raw binaries are saved directly. No installer script is involved.
-> Find the correct asset for your platform in the [Astro CLI GitHub Releases](https://github.com/astronomer/astro-cli/releases) (e.g., `astro_<version>_linux_amd64.tar.gz` for a standard Ubuntu runner) and host it on your internal mirror.
-
-### CLI resolution order
-
-The action resolves the Astro CLI using the following priority:
-
-1. **`ASTRO_CLI_PATH` env var** — use a binary at a specific path (no download).
-2. **`astro` already in `PATH`** — use the pre-installed CLI (no download).
-3. **`astro-cli-download-url` input** — download the binary directly to `~/.local/bin`.
-4. **Standard installer** — download via `godownloader.sh` into `~/.local/bin`.
 
 ## Outputs
 
@@ -201,8 +141,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v1
+
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.11.1
+      uses: astronomer/deploy-action@v1
       with:
         deployment-id: <deployment id>
         parse: true
@@ -216,8 +159,11 @@ In the following example, the folder `/example-dags/` is specified as the root f
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v1
+
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.11.1
+  uses: astronomer/deploy-action@v1
   with:
     deployment-id: <deployment id>
     root-folder: /example-dags/
@@ -229,8 +175,11 @@ In the following example, the pytest located at `/tests/test-tags.py` runs befor
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v1
+
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.11.1
+  uses: astronomer/deploy-action@v1
   with:
     deployment-id: <deployment id>
     pytest: true
@@ -243,8 +192,11 @@ In the following example, `force` is enabled and both the DAG parse and pytest p
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v1
+
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.11.1
+  uses: astronomer/deploy-action@v1
   with:
     deployment-id: <deployment id>
     force: true
@@ -271,6 +223,8 @@ jobs:
     steps:
     - name: Check out the repo
       uses: actions/checkout@v6
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v1
     - name: Create image tag
       id: image_tag
       run: echo ::set-output name=image_tag::astro-$(date +%Y%m%d%H%M%S)
@@ -287,7 +241,7 @@ jobs:
         build-args: |
           <your-build-arguments>
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.11.1
+      uses: astronomer/deploy-action@v1
       with:
         deployment-id: <deployment id>
         deploy-type: image-and-dags
@@ -301,8 +255,13 @@ In the following example we would be deploying the dbt project located at `dbt` 
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v1
+  with:
+    cli-version: "1.30.0"  # DBT deploys require CLI >= 1.28.1
+
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.11.1
+  uses: astronomer/deploy-action@v1
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
@@ -315,14 +274,20 @@ In the following example we would setup a workflow to deploy dags/images located
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v1
+  with:
+    cli-version: "1.30.0"  # DBT deploys require CLI >= 1.28.1
+
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.11.1
+  uses: astronomer/deploy-action@v1
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
     root-folder: dbt
+
 - name: DAGs/Image Deploy to Astro
-  uses: astronomer/deploy-action@v0.11.1
+  uses: astronomer/deploy-action@v1
   with:
     deployment-id: <deployment id>
     root-folder: astro-project/
@@ -335,8 +300,11 @@ In the following example, the deployment is woken up from hibernation before dep
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v1
+
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.11.1
+  uses: astronomer/deploy-action@v1
   with:
     deployment-id: <deployment id>
     wake-on-deploy: true
@@ -371,8 +339,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v1
+      with:
+        cli-version: "1.38.0"  # wait-time requires CLI >= 1.38.0
+
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.11.1
+      uses: astronomer/deploy-action@v1
       with:
         action: create-deployment-preview
         deployment-id: <original deployment id>
@@ -397,8 +370,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v1
+
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.11.1
+      uses: astronomer/deploy-action@v1
       with:
         action: deploy-deployment-preview
         deployment-id: <original deployment id>
@@ -422,8 +398,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v1
+      with:
+        cli-version: "1.30.0"  # DBT deploys require CLI >= 1.28.1
+
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.11.1
+      uses: astronomer/deploy-action@v1
       with:
         action: deploy-deployment-preview
         deploy-type: dbt
@@ -449,8 +430,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v1
+
     - name: Delete Deployment Preview
-      uses: astronomer/deploy-action@v0.11.1
+      uses: astronomer/deploy-action@v1
       with:
         action: delete-deployment-preview
         deployment-id: <original deployment id>
@@ -474,8 +458,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v1
+
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.11.1
+      uses: astronomer/deploy-action@v1
       with:
         deployment-id: <original deployment id>
 ```

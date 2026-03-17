@@ -57,10 +57,6 @@ inputs:
     required: false
     default: true
     description: "Copy pools from the original Deployment to the new deployment preview."
-  cli-version:
-    required: false
-    default: ""
-    description: "The desired Astro CLI version to use"
   checkout:
     required: false
     default: true
@@ -101,10 +97,6 @@ inputs:
   wait-time:
     required: false
     description: "The time to wait for the deployment or deploy operation to finish successfully."
-  astro-cli-download-url:
-    required: false
-    default: ""
-    description: "Direct URL to download the Astro CLI binary. When set, the binary is downloaded from this URL instead of using the standard installer script. Supports internal mirrors and air-gapped environments."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -126,37 +118,41 @@ runs:
       shell: bash
       run: |
         echo "The 'deploy-image' option is deprecated and will be removed in 1.0 release. Use 'deploy-type: image-and-dags' instead."
-    - name: Install Astro CLI
+    - name: Verify Astro CLI
       env:
-        INPUT_CLI_VERSION: ${{ inputs.cli-version }}
         INPUT_DEPLOY_TYPE: ${{ inputs.deploy-type }}
         INPUT_WAIT_TIME: ${{ inputs.wait-time }}
-        INPUT_ASTRO_CLI_DOWNLOAD_URL: ${{ inputs.astro-cli-download-url }}
       run: |
 
-        echo ::group::Install Astro CLI
+        echo ::group::Verify Astro CLI
 
-        # If ASTRO_CLI_PATH is set, use that binary instead of downloading.
-        # A symlink is created in ~/.local/bin so we never need write access
-        # to the directory where the binary lives.
+        # If ASTRO_CLI_PATH is set, create a symlink in ~/.local/bin pointing to that binary.
+        # The caller is responsible for the binary being executable.
         if [[ -n "${ASTRO_CLI_PATH}" ]]; then
           if [[ ! -f "${ASTRO_CLI_PATH}" ]]; then
             echo "ERROR: ASTRO_CLI_PATH is set to '${ASTRO_CLI_PATH}' but the file does not exist."
             exit 1
           fi
-          echo "Using Astro CLI from ASTRO_CLI_PATH: ${ASTRO_CLI_PATH}"
-          INSTALL_DIR="${HOME}/.local/bin"
-          mkdir -p "${INSTALL_DIR}"
-          ln -sf "${ASTRO_CLI_PATH}" "${INSTALL_DIR}/astro"
-          export PATH="${INSTALL_DIR}:${PATH}"
-          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+          mkdir -p "${HOME}/.local/bin"
+          ln -sf "${ASTRO_CLI_PATH}" "${HOME}/.local/bin/astro"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
         fi
 
-        # If Astro CLI is already available (via ASTRO_CLI_PATH or pre-installed in PATH), fetch its version
-        if command -v astro &> /dev/null; then
-          # "astro version" returns output of the form: "Astro CLI Version: 1.29.0"
-          INPUT_CLI_VERSION=$(astro version | awk '{print $4}')
+        # Verify Astro CLI is available
+        if ! command -v astro &> /dev/null; then
+          echo "ERROR: Astro CLI is not installed or not in PATH."
+          echo "Please use the astronomer/setup-astro-cli to install the Astro CLI before using this action."
+          echo ""
+          echo "Example:"
+          echo "  - name: Install Astro CLI"
+          echo "    uses: astronomer/setup-astro-cli@v1"
+          echo ""
+          exit 1
         fi
+
+        # Get the installed CLI version
+        CLI_VERSION=$(astro version | awk '{print $4}')
+        echo "Found Astro CLI version: ${CLI_VERSION}"
 
         # Ensure semver CLI is available for version comparisons
         if ! command -v semver &> /dev/null; then
@@ -164,65 +160,23 @@ runs:
         fi
 
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
-        if [[ "${INPUT_DEPLOY_TYPE}" == "dbt" && "${INPUT_CLI_VERSION}" != "" ]]; then
+        if [[ "${INPUT_DEPLOY_TYPE}" == "dbt" ]]; then
           REQUIRED_VERSION="1.28.1"
-          CURRENT_VERSION=$(astro version | awk '{print $4}')
-          if ! semver -r ">${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
-            echo "DBT Deploy requires Astro CLI version $REQUIRED_VERSION or higher"
+          if ! semver -r ">${REQUIRED_VERSION}" "${CLI_VERSION}"; then
+            echo "ERROR: DBT Deploy requires Astro CLI version greater than ${REQUIRED_VERSION}, found ${CLI_VERSION}"
             exit 1
           fi
         fi
 
         # Check if the Astro CLI version is less than 1.38.0 for wait-time option
-        if [[ "${INPUT_WAIT_TIME}" != "" && "${INPUT_CLI_VERSION}" != "" ]]; then
+        if [[ "${INPUT_WAIT_TIME}" != "" ]]; then
           REQUIRED_VERSION="1.38.0"
-          if ! semver -r ">=${REQUIRED_VERSION}" "${INPUT_CLI_VERSION}"; then
-            echo "Wait time option requires Astro CLI version $REQUIRED_VERSION or higher"
+          if ! semver -r ">=${REQUIRED_VERSION}" "${CLI_VERSION}"; then
+            echo "ERROR: wait-time option requires Astro CLI version ${REQUIRED_VERSION} or higher, found ${CLI_VERSION}"
             exit 1
           fi
         fi
 
-        # Skip installation if Astro CLI is already available (via ASTRO_CLI_PATH or pre-installed in PATH)
-        if command -v astro &> /dev/null; then
-          echo "Astro CLI is already installed, skipping installation"
-          echo ::endgroup::
-          exit 0
-        fi
-
-        # check if CLI_VERSION does not start with "v", then add "v" to it
-        if [[ "${INPUT_CLI_VERSION}" != "" && "${INPUT_CLI_VERSION}" != v* ]]; then
-          INPUT_CLI_VERSION="v${INPUT_CLI_VERSION}"
-        fi
-
-        # Direct download: supports internal mirrors and installs without sudo.
-        # When astro-cli-download-url is set, the binary is fetched from that URL
-        # and placed in ~/.local/bin; no elevated privileges are required.
-        # Supports both raw binaries and .tar.gz archives (GitHub Releases format).
-        if [[ -n "${INPUT_ASTRO_CLI_DOWNLOAD_URL}" ]]; then
-          INSTALL_DIR="${HOME}/.local/bin"
-          mkdir -p "${INSTALL_DIR}"
-          echo "Downloading Astro CLI from ${INPUT_ASTRO_CLI_DOWNLOAD_URL} to ${INSTALL_DIR}"
-          if [[ "${INPUT_ASTRO_CLI_DOWNLOAD_URL}" == *.tar.gz ]]; then
-            curl -sSL "${INPUT_ASTRO_CLI_DOWNLOAD_URL}" | tar -xz -C "${INSTALL_DIR}" astro
-          else
-            curl -sSL "${INPUT_ASTRO_CLI_DOWNLOAD_URL}" -o "${INSTALL_DIR}/astro"
-          fi
-          chmod +x "${INSTALL_DIR}/astro"
-          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
-          echo ::endgroup::
-          exit 0
-        fi
-
-        # Use godownloader.sh directly so we can control the install directory
-        # and avoid the sudo requirement of the install.astronomer.io wrapper.
-        INSTALL_DIR="${HOME}/.local/bin"
-        mkdir -p "${INSTALL_DIR}"
-        if [[ "${INPUT_CLI_VERSION}" == "" ]]; then
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "${INSTALL_DIR}"
-        else
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "${INSTALL_DIR}" "${INPUT_CLI_VERSION}"
-        fi
-        echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
         echo ::endgroup::
       shell: bash
     - name: Determine Deploy Deployment
