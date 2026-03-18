@@ -57,10 +57,6 @@ inputs:
     required: false
     default: true
     description: "Copy pools from the original Deployment to the new deployment preview."
-  cli-version:
-    required: false
-    default: ""
-    description: "The desired Astro CLI version to use"
   checkout:
     required: false
     default: true
@@ -122,16 +118,25 @@ runs:
       shell: bash
       run: |
         echo "The 'deploy-image' option is deprecated and will be removed in 1.0 release. Use 'deploy-type: image-and-dags' instead."
-    - name: Install Astro CLI
+    - name: Verify Astro CLI
+      env:
+        INPUT_DEPLOY_TYPE: ${{ inputs.deploy-type }}
+        INPUT_WAIT_TIME: ${{ inputs.wait-time }}
       run: |
+        echo ::group::Verify Astro CLI
 
-        echo ::group::Install Astro CLI
-        CLI_VERSION=${{ inputs.cli-version }}
-        # if Astro CLI is pre-installed, fetch it's version
-        if command -v astro &> /dev/null; then
-          # "astro version" commands returns the CLI version, its output is of the form: "Astro CLI Version: 1.29.0"
-          CLI_VERSION=$(astro version | awk '{print $4}')
+        # Verify Astro CLI is available
+        if ! command -v astro &> /dev/null; then
+          echo "ERROR: Astro CLI is not installed or not in PATH."
+          echo "Install it before calling this action:"
+          echo ""
+          echo "  - uses: astronomer/setup-astro-cli"
+          echo ""
+          exit 1
         fi
+
+        # "astro version" commands returns the CLI version, its output is of the form: "Astro CLI Version: 1.29.0"
+        CLI_VERSION=$(astro version | awk '{print $4}')
 
         # Ensure semver CLI is available for version comparisons
         if ! command -v semver &> /dev/null; then
@@ -139,17 +144,16 @@ runs:
         fi
 
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
-        if [[ "${{ inputs.deploy-type }}" == "dbt" && $CLI_VERSION != "" ]]; then
+        if [[ "${INPUT_DEPLOY_TYPE}" == "dbt" && $CLI_VERSION != "" ]]; then
           REQUIRED_VERSION="1.28.1"
-          CURRENT_VERSION=$(astro version | awk '{print $4}')
-          if ! semver -r ">${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
+          if ! semver -r ">${REQUIRED_VERSION}" "${CLI_VERSION}"; then
             echo "DBT Deploy requires Astro CLI version $REQUIRED_VERSION or higher"
             exit 1
           fi
         fi
 
         # Check if the Astro CLI version is less than 1.38.0 for wait-time option
-        if [[ "${{ inputs.wait-time }}" != "" && $CLI_VERSION != "" ]]; then
+        if [[ "${INPUT_WAIT_TIME}" != "" && $CLI_VERSION != "" ]]; then
           REQUIRED_VERSION="1.38.0"
           if ! semver -r ">=${REQUIRED_VERSION}" "${CLI_VERSION}"; then
             echo "Wait time option requires Astro CLI version $REQUIRED_VERSION or higher"
@@ -157,22 +161,6 @@ runs:
           fi
         fi
 
-        # skip Astro CLI installation if already installed
-        if command -v astro &> /dev/null; then
-          echo "Astro CLI is already installed"
-          exit 0
-        fi
-
-        # check if CLI_VERSION does not starts with "v", then add "v" to it
-        if [[ $CLI_VERSION != "" && $CLI_VERSION != v* ]]; then
-          CLI_VERSION=v$CLI_VERSION
-        fi
-
-        if [[ $CLI_VERSION == "" ]]; then
-          curl -sSL https://install.astronomer.io | sudo bash -s
-        else
-          curl -sSL https://install.astronomer.io | sudo bash -s -- $CLI_VERSION
-        fi
         echo ::endgroup::
       shell: bash
     - name: Determine Deploy Deployment

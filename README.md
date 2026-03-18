@@ -26,6 +26,7 @@ To use this GitHub action, you need:
 - A Deployment on Astro. See [Create a Deployment](https://docs.astronomer.io/astro/create-deployment).
 - An Organization, Workspace, or Deployment API Token. See [API Tokens](https://docs.astronomer.io/astro/workspace-api-tokens)
 - Or (deprecated) a Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
+- The Astro CLI installed and available in `PATH` before this action runs. Use [`astronomer/setup-astro-cli`](https://github.com/astronomer/setup-astro-cli) to install it as a step in your workflow.
 
 > [!TIP]
 > Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRO_API_TOKEN` or Deployment API Keys. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples).
@@ -67,7 +68,6 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `mount-path` | `` | Path to mount dbt project in Airflow, for reference by DAGs. Default /usr/local/airflow/dbt/{dbt project name} |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
-| `cli-version` | `` | The desired Astro CLI version to use. The latest version is used if left unset. |
 | `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
 
 
@@ -122,6 +122,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.1
+      with:
+        version: "1.40.1"
     - name: Deploy to Astro
       uses: astronomer/deploy-action@v0.11.1
       with:
@@ -192,6 +196,10 @@ jobs:
     steps:
     - name: Check out the repo
       uses: actions/checkout@v6
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.1
+      with:
+        version: "1.40.1"
     - name: Create image tag
       id: image_tag
       run: echo ::set-output name=image_tag::astro-$(date +%Y%m%d%H%M%S)
@@ -292,6 +300,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.1
+      with:
+        version: "1.40.1"
     - name: Create Deployment Preview
       uses: astronomer/deploy-action@v0.11.1
       with:
@@ -318,6 +330,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.1
+      with:
+        version: "1.40.1"
     - name: Deploy to Deployment Preview
       uses: astronomer/deploy-action@v0.11.1
       with:
@@ -343,6 +359,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.1
+      with:
+        version: "1.40.1"
     - name: Deploy to Deployment Preview
       uses: astronomer/deploy-action@v0.11.1
       with:
@@ -370,6 +390,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.1
+      with:
+        version: "1.40.1"
     - name: Delete Deployment Preview
       uses: astronomer/deploy-action@v0.11.1
       with:
@@ -395,6 +419,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.1
+      with:
+        version: "1.40.1"
     - name: Deploy to Astro
       uses: astronomer/deploy-action@v0.11.1
       with:
