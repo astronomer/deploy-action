@@ -113,7 +113,7 @@ runs:
       uses: actions/checkout@v6
       if: inputs.checkout == 'true'
       with:
-        fetch-depth: 0 # Fetch all history
+        fetch-depth: 0  # Fetch all history
         ref: ${{ github.event.after }}
         clean: false
         submodules: ${{ inputs.checkout-submodules }}

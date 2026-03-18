@@ -18,7 +18,7 @@ jobs:
       - name: Redact Inputs
         run: |
 
-          # add-mask will redact the value of the input, but will still log the value, 
+          # add-mask will redact the value of the input, but will still log the value,
           # hence using a known workaround: https://github.com/actions/runner/issues/643
           WORKSPACE_ID=$(jq -r '.inputs.workspace_id' $GITHUB_EVENT_PATH)
           echo ::add-mask::$WORKSPACE_ID
