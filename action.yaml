@@ -163,15 +163,20 @@ runs:
           exit 0
         fi
 
+        # Set up local installation directory
+        INSTALL_DIR="$HOME/.local/bin"
+        mkdir -p "$INSTALL_DIR"
+        echo "$INSTALL_DIR" >> $GITHUB_PATH
+
         # check if CLI_VERSION does not starts with "v", then add "v" to it
         if [[ $CLI_VERSION != "" && $CLI_VERSION != v* ]]; then
           CLI_VERSION=v$CLI_VERSION
         fi
 
         if [[ $CLI_VERSION == "" ]]; then
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$INSTALL_DIR"
         else
-          curl -sSL https://install.astronomer.io | sudo bash -s -- $CLI_VERSION
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$INSTALL_DIR" "$CLI_VERSION"
         fi
         echo ::endgroup::
       shell: bash
