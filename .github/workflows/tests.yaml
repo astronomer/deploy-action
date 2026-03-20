@@ -18,7 +18,7 @@ jobs:
       - name: Redact Inputs
         run: |
 
-          # add-mask will redact the value of the input, but will still log the value, 
+          # add-mask will redact the value of the input, but will still log the value,
           # hence using a known workaround: https://github.com/actions/runner/issues/643
           WORKSPACE_ID=$(jq -r '.inputs.workspace_id' $GITHUB_EVENT_PATH)
           echo ::add-mask::$WORKSPACE_ID
@@ -62,7 +62,9 @@ jobs:
 
           wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
 
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
@@ -119,7 +121,9 @@ jobs:
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
       - name: Mock git commands
         run: |
@@ -214,7 +218,9 @@ jobs:
 
           sudo apt-get install jq
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -292,7 +298,9 @@ jobs:
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -391,7 +399,9 @@ jobs:
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -471,7 +481,9 @@ jobs:
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -584,7 +596,9 @@ jobs:
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
       - name: Build Docker image
         run: cd e2e-setup/astro-project && docker build -t custom-image:latest .
@@ -672,7 +686,9 @@ jobs:
 
           sudo apt-get install jq
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
           test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
           echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
@@ -755,7 +771,9 @@ jobs:
           sudo apt-get install jq
 
           # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
           test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
           echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
@@ -1001,7 +1019,9 @@ jobs:
 
       - name: Install Astro CLI and set context
         run: |
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
