@@ -328,7 +328,8 @@ runs:
 
         echo ::group::Determine if DAG Deploy is enabled
         if [[ ${{ inputs.action }} != create-deployment-preview && ${{ inputs.action }} != delete-deployment-preview ]]; then
-          echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
+          DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.dag_deploy_enabled)
+          echo "DAG_DEPLOY_ENABLED=${DAG_DEPLOY_ENABLED:-false}" >> $GITHUB_OUTPUT
         else
           echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
         fi
@@ -454,7 +455,7 @@ runs:
         fi
 
         # check if user has passed a custom image or the action has created a new deployment preview, then we would need to deploy the image
-        if [[ ${{ inputs.image-name }} != "no-custom-image" || ${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }} == false || ${{ inputs.action }} == create-deployment-preview ]]; then
+        if [[ ${{ inputs.image-name }} != "no-custom-image" || "${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }}" == "false" || ${{ inputs.action }} == create-deployment-preview ]]; then
           SKIP_IMAGE_OR_DAGS_DEPLOY=false
           DAGS_ONLY_DEPLOY=false
         fi
