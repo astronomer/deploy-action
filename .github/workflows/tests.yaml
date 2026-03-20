@@ -451,6 +451,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [infer-deploy, create-test-deployments]
     strategy:
+      max-parallel: 1
       matrix:
         deployment_id:
           [
