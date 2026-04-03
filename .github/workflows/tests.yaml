@@ -264,10 +264,178 @@ jobs:
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
           hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
+  dag-folder-deploy-test:
+    name: DAG Folder Deploy Test
+    runs-on: ubuntu-latest
+    needs: [dag-deploy-test, create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+          ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Mock git commands for dag-folder scenario
+        run: |
+          # Use mock that returns dags/ paths (outside root-folder) to simulate
+          # repos where DAGs live at a different location in version control
+          mv e2e-setup/mocks/dag-folder-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+          # we need to pre-install the CLI to set the context
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Deploy to Astro with dag-folder
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          root-folder: e2e-setup/astro-project
+          dag-folder: dags
+          parse: true
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_dag_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
+
+  dag-folder-prefix-no-deploy-test:
+    name: DAG Folder Prefix No Deploy Test
+    runs-on: ubuntu-latest
+    needs: [dag-folder-deploy-test, create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+          ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Mock git commands for dag-folder prefix scenario
+        run: |
+          # Use mock that returns dags-old/ paths to ensure we only match the
+          # configured dags/ directory
+          mv e2e-setup/mocks/dag-folder-prefix-no-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Install dependencies
+        run: |
+
+          sudo apt-get install jq
+          # we need to pre-install the CLI to set the context
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Deploy to Astro with dag-folder prefix mismatch
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          root-folder: e2e-setup/astro-project
+          dag-folder: dags
+          parse: true
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate no image or dag deploy happened
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_no_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
+
   pytests-test:
     name: Pytest Test
     runs-on: ubuntu-latest
-    needs: [dag-deploy-test, create-test-deployments]
+    needs: [dag-folder-prefix-no-deploy-test, create-test-deployments]
     strategy:
       matrix:
         deployment_id:
