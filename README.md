@@ -54,6 +54,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
 | `root-folder` | `.` | Path to the Astro project, or dbt project for dbt deploys. |
+| `dag-folder` | | Path to the DAG folder in the repository, used for change detection when DAGs live outside `root-folder` in version control. When set, file changes under this path are treated as DAG changes during deploy type inference. See [Non-standard repository structures](#non-standard-repository-structures). |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro. Note that when an image deploy is performed (i.e. `astro deploy`), parsing is also executed by default. Parsing is _not_ performed automatically for DAG-only deploys (i.e. `astro deploy --dags`). |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`.|
@@ -143,6 +144,39 @@ steps:
     deployment-id: <deployment id>
     root-folder: /example-dags/
 ```
+
+### Non-standard repository structures
+
+If your DAGs live outside your Astro project in the repository (for example, at the repo root), the action's git-based change detection won't detect DAG changes by default. Use the `dag-folder` input to tell the action where DAGs live in version control.
+
+In the following example, DAGs are stored at `dags/` in the repo root and copied into the Astro project at CI time:
+
+```yaml
+steps:
+- name: checkout repo
+  uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+    ref: ${{ github.event.after }}
+    clean: false
+
+- name: Copy dags into astro folder
+  run: cp -r dags astro/dags
+
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.12.0
+  with:
+    deployment-id: <deployment id>
+    root-folder: astro
+    dag-folder: dags
+    checkout: false
+```
+
+With this configuration:
+- Changes to files under `dags/` are detected as DAG changes (enabling DAG-only deploys)
+- `dag-folder` is matched as a directory path, so `dags` matches `dags/...` but not `dags-old/...`
+- Changes to files under `astro/` (e.g., `Dockerfile`, `requirements.txt`) trigger a full image deploy
+- The `root-folder` is still used to locate the Astro project for the actual deploy command
 
 ### Run Pytests
 
