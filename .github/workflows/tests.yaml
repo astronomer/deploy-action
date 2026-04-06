@@ -29,10 +29,44 @@ jobs:
           TOKEN=$(jq -r '.inputs.token' $GITHUB_EVENT_PATH)
           echo ::add-mask::$TOKEN
 
+  check-astro-test-config:
+    name: Check Astro Test Config
+    runs-on: ubuntu-latest
+    environment: e2e-test
+    outputs:
+      has_astro_test_config: ${{ steps.check.outputs.has_astro_test_config }}
+    steps:
+      - name: Check Astro test configuration
+        id: check
+        env:
+          SECRET_WORKSPACE_ID: ${{ secrets.WORKSPACE_ID }}
+          SECRET_ORGANIZATION_ID: ${{ secrets.ORGANIZATION_ID }}
+          SECRET_ASTRONOMER_HOST: ${{ secrets.ASTRONOMER_HOST }}
+          SECRET_ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+        run: |
+          INPUT_WORKSPACE_ID=$(jq -r '.inputs.workspace_id // empty' "$GITHUB_EVENT_PATH")
+          INPUT_ORGANIZATION_ID=$(jq -r '.inputs.org_id // empty' "$GITHUB_EVENT_PATH")
+          INPUT_ASTRONOMER_HOST=$(jq -r '.inputs.astronomer_host // empty' "$GITHUB_EVENT_PATH")
+          INPUT_ASTRO_API_TOKEN=$(jq -r '.inputs.token // empty' "$GITHUB_EVENT_PATH")
+
+          WORKSPACE_ID="${INPUT_WORKSPACE_ID:-$SECRET_WORKSPACE_ID}"
+          ORGANIZATION_ID="${INPUT_ORGANIZATION_ID:-$SECRET_ORGANIZATION_ID}"
+          ASTRONOMER_HOST="${INPUT_ASTRONOMER_HOST:-$SECRET_ASTRONOMER_HOST}"
+          ASTRO_API_TOKEN="${INPUT_ASTRO_API_TOKEN:-$SECRET_ASTRO_API_TOKEN}"
+
+          if [[ -n "$WORKSPACE_ID" && -n "$ORGANIZATION_ID" && -n "$ASTRONOMER_HOST" && -n "$ASTRO_API_TOKEN" ]]; then
+            echo "Astro test configuration is available."
+            echo "has_astro_test_config=true" >> $GITHUB_OUTPUT
+          else
+            echo "Astro test configuration is unavailable for this run. Skipping e2e jobs."
+            echo "has_astro_test_config=false" >> $GITHUB_OUTPUT
+          fi
+
   # Create test deployments would use the template files and generate deployments with unique names
   create-test-deployments:
     name: Create Deployment
-    needs: redact-inputs
+    if: ${{ needs.check-astro-test-config.outputs.has_astro_test_config == 'true' }}
+    needs: [redact-inputs, check-astro-test-config]
     runs-on: ubuntu-latest
     environment: e2e-test
     strategy:
@@ -1171,6 +1205,7 @@ jobs:
     environment: e2e-test
     needs:
       [
+        check-astro-test-config,
         create-test-deployments,
         dag-deploy-test,
         pytests-test,
@@ -1179,7 +1214,7 @@ jobs:
         deployment-preview-test,
       ]
     # ensure that we always try delete the deployment even if any of the tests fail
-    if: always()
+    if: ${{ always() && needs.check-astro-test-config.outputs.has_astro_test_config == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
