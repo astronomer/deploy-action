@@ -43,32 +43,37 @@ runs:
       shell: bash
       id: get-info
       run: |
+        WORKSPACE_ID="${{ inputs.secret_workspace_id }}"
         if [ "${{ inputs.input_workspace_id }}" != "" ]; then
           echo "Using provided workspace_id"
-          echo "WORKSPACE_ID=${{ inputs.input_workspace_id }}" >> $GITHUB_OUTPUT
-        else
-          echo "WORKSPACE_ID=${{ inputs.secret_workspace_id }}" >> $GITHUB_OUTPUT
+          WORKSPACE_ID="${{ inputs.input_workspace_id }}"
         fi
 
+        ORGANIZATION_ID="${{ inputs.secret_organization_id }}"
         if [ "${{ inputs.input_organization_id }}" != "" ]; then
           echo "Using provided org_id"
-          echo "ORGANIZATION_ID=${{ inputs.input_organization_id }}" >> $GITHUB_OUTPUT
-        else
-          echo "ORGANIZATION_ID=${{ inputs.secret_organization_id }}" >> $GITHUB_OUTPUT
+          ORGANIZATION_ID="${{ inputs.input_organization_id }}"
         fi
 
+        ASTRONOMER_HOST="${{ inputs.secret_astronomer_host }}"
         if [ "${{ inputs.input_astronomer_host }}" != "" ]; then
           echo "Using provided astronomer_host"
-          echo "ASTRONOMER_HOST=${{ inputs.input_astronomer_host }}" >> $GITHUB_OUTPUT
-        else
-          echo "ASTRONOMER_HOST=${{ inputs.secret_astronomer_host }}" >> $GITHUB_OUTPUT
+          ASTRONOMER_HOST="${{ inputs.input_astronomer_host }}"
         fi
 
+        ASTRO_API_TOKEN="${{ inputs.secret_astro_api_token }}"
         if [ "${{ inputs.input_astro_api_token }}" != "" ]; then
           echo "Using provided token"
-          echo "ASTRO_API_TOKEN=${{ inputs.input_astro_api_token }}" >> $GITHUB_OUTPUT
-          echo "ASTRO_API_TOKEN=${{ inputs.input_astro_api_token }}" >> $GITHUB_ENV
-        else
-          echo "ASTRO_API_TOKEN=${{ inputs.secret_astro_api_token }}" >> $GITHUB_OUTPUT
-          echo "ASTRO_API_TOKEN=${{ inputs.secret_astro_api_token }}" >> $GITHUB_ENV
+          ASTRO_API_TOKEN="${{ inputs.input_astro_api_token }}"
         fi
+
+        if [ "$WORKSPACE_ID" = "" ] || [ "$ORGANIZATION_ID" = "" ] || [ "$ASTRONOMER_HOST" = "" ] || [ "$ASTRO_API_TOKEN" = "" ]; then
+          echo "Missing Astro test configuration. Provide workflow inputs or make WORKSPACE_ID, ORGANIZATION_ID, ASTRONOMER_HOST, and ASTRO_API_TOKEN available to this job." >&2
+          exit 1
+        fi
+
+        echo "WORKSPACE_ID=$WORKSPACE_ID" >> $GITHUB_OUTPUT
+        echo "ORGANIZATION_ID=$ORGANIZATION_ID" >> $GITHUB_OUTPUT
+        echo "ASTRONOMER_HOST=$ASTRONOMER_HOST" >> $GITHUB_OUTPUT
+        echo "ASTRO_API_TOKEN=$ASTRO_API_TOKEN" >> $GITHUB_OUTPUT
+        echo "ASTRO_API_TOKEN=$ASTRO_API_TOKEN" >> $GITHUB_ENV

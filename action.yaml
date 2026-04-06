@@ -94,6 +94,10 @@ inputs:
     required: false
     default: false
     description: "Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`."
+  dag-folder:
+    required: false
+    default: ""
+    description: "Path to the DAG folder in the repository, used for change detection when DAGs live outside root-folder in version control. When set, file changes under this path are treated as DAG changes during deploy type inference. This is useful for repos that copy DAGs into root-folder at CI time."
   wake-on-deploy:
     required: false
     default: false
@@ -363,8 +367,14 @@ runs:
           echo "files changed: $files"
         fi
 
+        # Normalize root-folder: strip leading "./" and trailing "/" since git diff paths don't include them
+        DBT_ROOT_FOLDER="${{ inputs.root-folder }}"
+        DBT_ROOT_FOLDER="${DBT_ROOT_FOLDER#./}"
+        DBT_ROOT_FOLDER="${DBT_ROOT_FOLDER%/}"
+
         for file in $files; do
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
+          # Empty root-folder means the dbt project lives at the repository root.
+          if [[ "$DBT_ROOT_FOLDER" == "" || "$file" == "$DBT_ROOT_FOLDER" || "$file" == "$DBT_ROOT_FOLDER"/* ]]; then
             echo $file is part of configured root folder, so would be triggering a dbt deploy
             DBT_DEPLOY=true
           fi
@@ -403,6 +413,17 @@ runs:
         SKIP_IMAGE_OR_DAGS_DEPLOY=false
         files=()
 
+        # Normalize root-folder: strip leading "./" and trailing "/" since git diff paths don't include them
+        ROOT_FOLDER="${{ inputs.root-folder }}"
+        ROOT_FOLDER="${ROOT_FOLDER#./}"
+        ROOT_FOLDER="${ROOT_FOLDER%/}"
+
+        # Normalize dag-folder: strip leading "./" or "/" and trailing "/" for the same reason
+        DAG_FOLDER="${{ inputs.dag-folder }}"
+        DAG_FOLDER="${DAG_FOLDER#./}"
+        DAG_FOLDER="${DAG_FOLDER#/}"
+        DAG_FOLDER="${DAG_FOLDER%/}"
+
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
         # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
@@ -422,20 +443,37 @@ runs:
         fi
 
         for file in $files; do
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
-            echo $file is part of the input root folder
+          FILE_IN_SCOPE=false
+          IS_DAG_FILE=false
+
+          # Check if file is under root-folder (empty root-folder means all files are in scope)
+          if [[ "$ROOT_FOLDER" == "" || "$file" == "$ROOT_FOLDER" || "$file" == "$ROOT_FOLDER"/* ]]; then
+            FILE_IN_SCOPE=true
+            if [[ $file == *"dags/"* ]]; then
+              IS_DAG_FILE=true
+            fi
+          fi
+
+          # Check if file is under dag-folder (for repos where DAGs live outside root-folder in git)
+          if [[ "$DAG_FOLDER" != "" && ( "$file" == "$DAG_FOLDER" || "$file" == "$DAG_FOLDER"/* ) ]]; then
+            FILE_IN_SCOPE=true
+            IS_DAG_FILE=true
+          fi
+
+          if [[ $FILE_IN_SCOPE == true ]]; then
             SKIP_IMAGE_OR_DAGS_DEPLOY=false
             if [[ ${{ inputs.deploy-type }} == 'infer' ]]; then
-              if [[ $file == *"dags/"* ]]; then
-                echo $file is part of dags folder
+              if [[ $IS_DAG_FILE == true ]]; then
+                echo "$file is a DAG file"
                 DAGS_ONLY_DEPLOY=true
               else
+                echo "$file is a non-DAG file"
                 DAGS_ONLY_DEPLOY=false
                 break
               fi
             elif [[ ${{ inputs.deploy-type }} == 'dags-only' ]]; then
-              if [[ $file == *"dags/"* ]]; then
-                echo $file is part of dags folder
+              if [[ $IS_DAG_FILE == true ]]; then
+                echo "$file is a DAG file"
                 DAGS_ONLY_DEPLOY=true
               fi
             elif [[ ${{ inputs.deploy-type }} == 'image-and-dags' ]]; then
