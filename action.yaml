@@ -418,9 +418,10 @@ runs:
         ROOT_FOLDER="${ROOT_FOLDER#./}"
         ROOT_FOLDER="${ROOT_FOLDER%/}"
 
-        # Normalize dag-folder: strip leading "./" and trailing "/" for the same reason
+        # Normalize dag-folder: strip leading "./" or "/" and trailing "/" for the same reason
         DAG_FOLDER="${{ inputs.dag-folder }}"
         DAG_FOLDER="${DAG_FOLDER#./}"
+        DAG_FOLDER="${DAG_FOLDER#/}"
         DAG_FOLDER="${DAG_FOLDER%/}"
 
         GITHUB_EVENT_BEFORE=${{ github.event.before }}

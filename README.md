@@ -54,7 +54,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
 | `root-folder` | `.` | Path to the Astro project, or dbt project for dbt deploys. |
-| `dag-folder` | | Path to the DAG folder in the repository, used for change detection when DAGs live outside `root-folder` in version control. When set, file changes under this path are treated as DAG changes during deploy type inference. See [Non-standard repository structures](#non-standard-repository-structures). |
+| `dag-folder` | | Path to the DAG folder in the repository, used for change detection when DAGs live outside `root-folder` in version control. Leading `./`, leading `/`, and trailing `/` are ignored for matching. When set, file changes under this path are treated as DAG changes during deploy type inference. See [Non-standard repository structures](#non-standard-repository-structures). |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro. Note that when an image deploy is performed (i.e. `astro deploy`), parsing is also executed by default. Parsing is _not_ performed automatically for DAG-only deploys (i.e. `astro deploy --dags`). |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`.|
@@ -174,7 +174,7 @@ steps:
 
 With this configuration:
 - Changes to files under `dags/` are detected as DAG changes (enabling DAG-only deploys)
-- `dag-folder` is matched as a directory path, so `dags` matches `dags/...` but not `dags-old/...`
+- `dag-folder` is matched as a directory path, so `dags`, `./dags`, and `/dags/` all match `dags/...` but not `dags-old/...`
 - Changes to files under `astro/` (e.g., `Dockerfile`, `requirements.txt`) trigger a full image deploy
 - The `root-folder` is still used to locate the Astro project for the actual deploy command
 

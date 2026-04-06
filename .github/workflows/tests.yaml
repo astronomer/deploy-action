@@ -362,7 +362,7 @@ jobs:
           deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           root-folder: e2e-setup/astro-project
-          dag-folder: dags
+          dag-folder: /dags/
           parse: true
 
       - name: Get Deployment Info After Test
@@ -447,7 +447,7 @@ jobs:
           deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           root-folder: e2e-setup/astro-project
-          dag-folder: dags
+          dag-folder: /dags/
           parse: true
 
       - name: Get Deployment Info After Test
