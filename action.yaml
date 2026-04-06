@@ -373,7 +373,8 @@ runs:
         DBT_ROOT_FOLDER="${DBT_ROOT_FOLDER%/}"
 
         for file in $files; do
-          if [[ "$file" == "$DBT_ROOT_FOLDER" || "$file" == "$DBT_ROOT_FOLDER"/* ]]; then
+          # Empty root-folder means the dbt project lives at the repository root.
+          if [[ "$DBT_ROOT_FOLDER" == "" || "$file" == "$DBT_ROOT_FOLDER" || "$file" == "$DBT_ROOT_FOLDER"/* ]]; then
             echo $file is part of configured root folder, so would be triggering a dbt deploy
             DBT_DEPLOY=true
           fi

@@ -34,6 +34,7 @@ jobs:
     name: Create Deployment
     needs: redact-inputs
     runs-on: ubuntu-latest
+    environment: e2e-test
     strategy:
       matrix:
         deployment: [deployment-hibernate.yaml, deployment.yaml]
@@ -59,11 +60,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-
-          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
-
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -fsSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o "$HOME/.local/bin/yq"
+          chmod +x "$HOME/.local/bin/yq"
           curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
@@ -88,6 +88,7 @@ jobs:
   default-deploy-tests:
     name: Default Deploy Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [create-test-deployments]
     strategy:
       max-parallel: 1
@@ -183,6 +184,7 @@ jobs:
   dag-deploy-test:
     name: DAG Deploy Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [default-deploy-tests, create-test-deployments]
     strategy:
       matrix:
@@ -267,6 +269,7 @@ jobs:
   dag-folder-deploy-test:
     name: DAG Folder Deploy Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [dag-deploy-test, create-test-deployments]
     strategy:
       matrix:
@@ -351,6 +354,7 @@ jobs:
   dag-folder-prefix-no-deploy-test:
     name: DAG Folder Prefix No Deploy Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [dag-folder-deploy-test, create-test-deployments]
     strategy:
       matrix:
@@ -435,6 +439,7 @@ jobs:
   pytests-test:
     name: Pytest Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [dag-folder-prefix-no-deploy-test, create-test-deployments]
     strategy:
       matrix:
@@ -523,6 +528,7 @@ jobs:
   infer-deploy:
     name: Infer Deploy Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [pytests-test, create-test-deployments]
     strategy:
       max-parallel: 1
@@ -617,6 +623,7 @@ jobs:
   no-deploy-test:
     name: No Deploy Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [infer-deploy, create-test-deployments]
     strategy:
       max-parallel: 1
@@ -734,6 +741,7 @@ jobs:
   custom-docker-image-test:
     name: Custom Docker Image Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [no-deploy-test, create-test-deployments]
     strategy:
       matrix:
@@ -819,6 +827,7 @@ jobs:
   dbt-deploy-test:
     name: DBT Deploy Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [custom-docker-image-test, create-test-deployments]
     strategy:
       matrix:
@@ -908,6 +917,7 @@ jobs:
   deployment-preview-test:
     name: Deployment Preview Test
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs: [create-test-deployments]
     strategy:
       matrix:
@@ -1158,6 +1168,7 @@ jobs:
   delete-test-deployments:
     name: Delete Deployment
     runs-on: ubuntu-latest
+    environment: e2e-test
     needs:
       [
         create-test-deployments,
