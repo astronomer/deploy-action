@@ -148,6 +148,16 @@ runs:
           fi
         fi
 
+        # Check if the Astro CLI version is less than 1.21.0 for image-only deploy
+        if [[ "${{ inputs.deploy-type }}" == "image-only" && $CLI_VERSION != "" ]]; then
+          REQUIRED_VERSION="1.21.0"
+          CURRENT_VERSION=$(astro version | awk '{print $4}')
+          if ! semver -r ">=${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
+            echo "Image-only deploy requires Astro CLI version $REQUIRED_VERSION or higher"
+            exit 1
+          fi
+        fi
+
         # Check if the Astro CLI version is less than 1.38.0 for wait-time option
         if [[ "${{ inputs.wait-time }}" != "" && $CLI_VERSION != "" ]]; then
           REQUIRED_VERSION="1.38.0"
