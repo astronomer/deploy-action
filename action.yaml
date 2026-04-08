@@ -82,7 +82,7 @@ inputs:
   deploy-type:
     required: false
     default: "infer"
-    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', or 'dbt'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files."
+    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', 'image-only', or 'dbt'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files. 'image-only' deploys the image without updating DAGs."
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
@@ -389,7 +389,7 @@ runs:
       shell: bash
       id: dbt-deploy-options
     - name: Get Deploy Type
-      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' }}
+      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'image-only' }}
       run: |
 
         # infer based on files changed to deploy only dags or image and dags
@@ -441,6 +441,9 @@ runs:
             elif [[ ${{ inputs.deploy-type }} == 'image-and-dags' ]]; then
               DAGS_ONLY_DEPLOY=false
               break
+            elif [[ ${{ inputs.deploy-type }} == 'image-only' ]]; then
+              DAGS_ONLY_DEPLOY=false
+              break
             fi
           fi
         done
@@ -466,26 +469,32 @@ runs:
           DAGS_ONLY_DEPLOY=false
         fi
 
+        IMAGE_ONLY_DEPLOY=false
+        if [[ ${{ inputs.deploy-type }} == 'image-only' && $SKIP_IMAGE_OR_DAGS_DEPLOY == false ]]; then
+          IMAGE_ONLY_DEPLOY=true
+        fi
+
         echo "DAGS_ONLY_DEPLOY=$DAGS_ONLY_DEPLOY" >> $GITHUB_OUTPUT
         echo "SKIP_IMAGE_OR_DAGS_DEPLOY=$SKIP_IMAGE_OR_DAGS_DEPLOY" >> $GITHUB_OUTPUT
+        echo "IMAGE_ONLY_DEPLOY=$IMAGE_ONLY_DEPLOY" >> $GITHUB_OUTPUT
         echo ::endgroup::
       shell: bash
       id: deploy-type
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: Setup image or dags deploy options
-      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' }}
+      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'image-only' }}
       run: |
 
         echo ::group::Setup image or dags deploy options
         options=""
 
-        # add parse option
-        if [[ ${{ inputs.parse }} == true ]]; then
+        # add parse option (not applicable for image-only deploys)
+        if [[ ${{ inputs.parse }} == true && ${{ inputs.deploy-type }} != "image-only" ]]; then
           options="--parse"
         fi
 
-        # add pytest option
-        if [[ ${{ inputs.pytest }} == true ]]; then
+        # add pytest option (not applicable for image-only deploys)
+        if [[ ${{ inputs.pytest }} == true && ${{ inputs.deploy-type }} != "image-only" ]]; then
           options="$options --pytest --test ${{ inputs.pytest-file }}"
         fi
 
@@ -578,6 +587,23 @@ runs:
           astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}} --wait-time "${{ inputs.wait-time }}"
         else
           astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
+        echo ::endgroup::
+      shell: bash
+    - name: Image Only Deploy to Astro
+      if: ${{ inputs.deploy-type == 'image-only' && steps.deploy-type.outputs.IMAGE_ONLY_DEPLOY == 'true' }}
+      run: |
+        echo ::group::Image Only Deploy to Astro
+        # Deploy image only, leaving existing DAGs untouched
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --image ${{steps.deploy-options.outputs.OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --image ${{steps.deploy-options.outputs.OPTIONS}}
         fi
         echo ::endgroup::
       shell: bash

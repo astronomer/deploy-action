@@ -5,6 +5,9 @@ inputs:
   is_dag_only_deploy:
     description: Whether the deploy operation was DAG-only
     default: false
+  is_image_only_deploy:
+    description: Whether the deploy operation was image-only (no DAG changes)
+    default: false
   is_no_deploy:
     description: If the deploy test was a no-op
     default: false
@@ -44,6 +47,16 @@ runs:
             exit 0
           fi
           echo "Deploy Action validation failed: deploy operation was not a no-op"
+          exit 1
+        fi
+
+        # If it's image only deploy then validate that only imageVersion was updated
+        if [[ "${{ inputs.is_image_only_deploy }}" == "true" ]]; then
+          if [[ "${{ inputs.image_version_before }}" != "${{ inputs.image_version_after }}" && "${{ inputs.dag_tarball_version_before }}" == "${{ inputs.dag_tarball_version_after }}" ]]; then
+            echo "Deploy Action validation succeeded: imageVersion only updated"
+            exit 0
+          fi
+          echo "Deploy Action validation failed: image-only deploy did not update imageVersion while keeping DAG tarball version unchanged"
           exit 1
         fi
 
