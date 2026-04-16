@@ -112,6 +112,9 @@ Astronomer recommends using the [`setup-astro-cli`](https://github.com/astronome
 
 Add `setup-astro-cli` as a step **before** any `deploy-action` step in your workflow:
 
+> [!TIP]
+> As a security best practice, Astronomer recommends pinning all third-party actions to a full commit SHA instead of a tag in production workflows. See [GitHub's security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions).
+
 ```yaml
 steps:
 - name: Install Astro CLI
@@ -177,7 +180,7 @@ jobs:
 ## Workflow file examples
 
 > [!TIP]
-> For production workflows, consider pinning actions to a full commit SHA instead of a tag to guard against supply chain attacks. See [GitHub's security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions).
+> As a security best practice, Astronomer recommends pinning all third-party actions to a full commit SHA instead of a tag in production workflows. See [GitHub's security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions).
 
 In the following example, the GitHub action deploys code to Astro. This example assumes that you have one Astro Deployment and one branch. When a change is merged to the `main` branch, your Astro project is deployed to Astro. DAG files are parsed on every deploy and no pytests are ran.
 
