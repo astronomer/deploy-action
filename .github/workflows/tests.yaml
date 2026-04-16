@@ -13,7 +13,9 @@ jobs:
     environment: e2e-test
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Redact Inputs
         run: |
@@ -42,7 +44,9 @@ jobs:
       HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -99,7 +103,9 @@ jobs:
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -192,7 +198,9 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -276,7 +284,9 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -366,7 +376,9 @@ jobs:
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -458,7 +470,9 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -546,7 +560,9 @@ jobs:
         deploy_type: [infer, dbt, dags, image-and-dags, image-only]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -661,7 +677,9 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -746,7 +764,9 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -835,7 +855,9 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -1088,7 +1110,9 @@ jobs:
     if: always()
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
