@@ -26,6 +26,7 @@ To use this GitHub action, you need:
 - A Deployment on Astro. See [Create a Deployment](https://docs.astronomer.io/astro/create-deployment).
 - An Organization, Workspace, or Deployment API Token. See [API Tokens](https://docs.astronomer.io/astro/workspace-api-tokens)
 - Or (deprecated) a Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
+- The [setup-astro-cli](https://github.com/astronomer/setup-astro-cli) action (recommended) to install and manage the Astro CLI in your workflow. See [Installing the Astro CLI](https://github.com/astronomer/deploy-action#installing-the-astro-cli).
 
 > [!TIP]
 > Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRO_API_TOKEN` or Deployment API Keys. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples).
@@ -105,6 +106,74 @@ The following section describe each of the deploy type input value in detail to 
   - otherwise it would do a dbt deploy
 
 
+## Installing the Astro CLI
+
+Astronomer recommends using the [`setup-astro-cli`](https://github.com/astronomer/setup-astro-cli) action to install and manage the Astro CLI in your workflows. This keeps CLI installation decoupled from deployment logic, lets you pin or update CLI versions independently (including via Dependabot), and allows a single installation to be reused across multiple deploy steps.
+
+Add `setup-astro-cli` as a step **before** any `deploy-action` step in your workflow:
+
+```yaml
+steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.12.0
+  with:
+    deployment-id: <deployment-id>
+```
+
+### Pin to a specific CLI version
+
+```yaml
+steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+  with:
+    version: "1.29.0"
+
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.12.0
+  with:
+    deployment-id: <deployment-id>
+```
+
+### Use an internal mirror or air-gapped runner
+
+```yaml
+steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+  with:
+    download-url: https://mirror.example.com/astro-cli/v1.29.0/astro_linux_amd64.tar.gz
+
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.12.0
+  with:
+    deployment-id: <deployment-id>
+```
+
+### Install once, deploy to multiple environments
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.0.1
+
+    - name: Deploy to Development
+      uses: astronomer/deploy-action@v0.12.0
+      with:
+        deployment-id: <dev-deployment-id>
+
+    - name: Deploy to Staging
+      uses: astronomer/deploy-action@v0.12.0
+      with:
+        deployment-id: <staging-deployment-id>
+```
+
 ## Workflow file examples
 
 
@@ -126,6 +195,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.0.1
     - name: Deploy to Astro
       uses: astronomer/deploy-action@v0.12.0
       with:
@@ -236,10 +307,14 @@ steps:
 
 ### Deploy DAGs and DBT project from same repo
 
-In the following example we would setup a workflow to deploy dags/images located at `astro-project` and dbt deploy from dbt project located at `dbt` folder in the same Github repo
+In the following example we would setup a workflow to deploy dags/images located at `astro-project` and dbt deploy from dbt project located at `dbt` folder in the same Github repo. The CLI is installed once and reused across both deploy steps.
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+  with:
+    version: "1.30.0"  # DBT deploys require CLI >= 1.28.1
 - name: DBT Deploy to Astro
   uses: astronomer/deploy-action@v0.12.0
   with:
