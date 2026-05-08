@@ -2,6 +2,12 @@ name: E2E Tests for Astro Deploy Action
 
 on:
   push:
+  workflow_dispatch:
+    inputs:
+      cli_version:
+        description: "Astro CLI version to pre-install via setup-astro-cli (e.g. 1.38.0). Leave blank for latest."
+        required: false
+        default: ""
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
@@ -57,13 +63,17 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
         run: |
 
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O "$HOME/.local/bin/yq" && chmod +x "$HOME/.local/bin/yq"
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
@@ -114,15 +124,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+        run: sudo apt-get install jq
 
       - name: Mock git commands
         run: |
@@ -134,9 +142,14 @@ jobs:
             mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
           fi
           chmod +x /usr/local/bin/git
-          cp $HOME/.local/bin/astro $HOME/.local/bin/astro-original
-          mv e2e-setup/mocks/astro-deploy.sh $HOME/.local/bin/astro
-          chmod +x $HOME/.local/bin/astro
+
+          # Stash the real astro at the path the astro-deploy.sh mock expects, then
+          # shadow `astro` on PATH with the mock by placing it earlier in PATH.
+          mkdir -p "$HOME/.local/bin"
+          cp "$(command -v astro)" "$HOME/.local/bin/astro-original"
+          mv e2e-setup/mocks/astro-deploy.sh "$HOME/.local/bin/astro"
+          chmod +x "$HOME/.local/bin/astro"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -212,14 +225,13 @@ jobs:
           mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
 
-      - name: Install dependencies
-        run: |
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
 
-          sudo apt-get install jq
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+      - name: Install dependencies
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -291,15 +303,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -392,15 +402,13 @@ jobs:
           fi
           chmod +x /usr/local/bin/git
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -473,15 +481,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+        run: sudo apt-get install jq
 
       - name: Mock git commands
         run: |
@@ -561,15 +567,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Setup dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -676,15 +680,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+        run: sudo apt-get install jq
 
       - name: Build Docker image
         run: cd e2e-setup/astro-project && docker build -t custom-image:latest .
@@ -766,15 +768,16 @@ jobs:
           mv e2e-setup/mocks/dbt-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
         id: setup
         run: |
 
           sudo apt-get install jq
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
           test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
           echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
@@ -850,16 +853,16 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
         id: setup
         run: |
 
           sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
 
           test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
           echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
@@ -1103,11 +1106,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
-      - name: Install Astro CLI and set context
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Set CLI context
         run: |
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
