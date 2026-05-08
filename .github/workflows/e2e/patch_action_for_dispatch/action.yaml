@@ -1,19 +1,13 @@
 name: Patch deploy-action for manual dispatch
-description: |
-  On workflow_dispatch the deploy-action's "Get Deploy Type" / "Get DBT Deploy
-  Options" steps early-exit because github.event.before/after are empty,
-  bypassing the diff-based deploy-type inference that the per-job git mocks
-  rely on. This composite patches the on-disk copy of the root action.yaml
-  to read DEPLOY_ACTION_DIFF_BEFORE/AFTER instead, so the existing mocks
-  drive the deploy-type decision the same way they do on push.
-
-  action.yaml in git is unchanged — only the on-disk copy is patched, and the
-  patch survives the deploy-action's own internal checkout step because GitHub
-  parses action.yaml once at `uses: ./` invocation.
-
-  The two env vars are set at the workflow level in tests.yaml:
-    DEPLOY_ACTION_DIFF_BEFORE: ${{ github.event.before || 'e2e-fake-before' }}
-    DEPLOY_ACTION_DIFF_AFTER:  ${{ github.event.after  || 'e2e-fake-after'  }}
+description: >
+  On workflow_dispatch the deploy-action's Get Deploy Type and Get DBT Deploy
+  Options steps early-exit because the github.event.before/after values are
+  empty, bypassing the diff-based deploy-type inference that the per-job git
+  mocks rely on. This composite patches the on-disk copy of the root
+  action.yaml to read the DEPLOY_ACTION_DIFF_BEFORE / DEPLOY_ACTION_DIFF_AFTER
+  env vars (set at the workflow level in tests.yaml) instead, so the existing
+  mocks drive the deploy-type decision the same way they do on push. The
+  action.yaml committed to git is unchanged.
 
 runs:
   using: composite
