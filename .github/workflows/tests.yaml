@@ -954,6 +954,9 @@ jobs:
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
+      - name: Re-patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: Deploy to Deployment Preview
         id: deployment-preview-deploy
         uses: ./
@@ -1002,6 +1005,9 @@ jobs:
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
+      - name: Re-patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: DAG Deploy to Astro
         id: deployment-preview-dag-deploy
         uses: ./
@@ -1042,6 +1048,9 @@ jobs:
         run: |
           mv e2e-setup/mocks/dbt-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
+
+      - name: Re-patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: DBT Deploy to Astro
         id: deployment-preview-dbt-deploy
@@ -1084,6 +1093,10 @@ jobs:
 
           echo "DBT Deploy Action validation failed: DBT bundle was not updated"
           exit 1
+
+      - name: Re-patch deploy-action for manual dispatch
+        if: always()
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Delete Deployment Preview
         id: delete-deployment-preview
