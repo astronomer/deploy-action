@@ -11,6 +11,9 @@ on:
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+  # Consumed by .github/workflows/e2e/patch_action_for_dispatch on workflow_dispatch.
+  DEPLOY_ACTION_DIFF_BEFORE: ${{ github.event.before || 'e2e-fake-before' }}
+  DEPLOY_ACTION_DIFF_AFTER: ${{ github.event.after || 'e2e-fake-after' }}
 
 jobs:
   redact-inputs:
@@ -49,6 +52,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -110,6 +116,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -207,6 +216,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: Get Astro Environment Info
         id: get-astro-env-info
         uses: ./.github/workflows/e2e/get_astro_env_info
@@ -289,6 +301,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -377,6 +392,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -468,6 +486,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: Get Astro Environment Info
         id: get-astro-env-info
         uses: ./.github/workflows/e2e/get_astro_env_info
@@ -553,6 +574,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -667,6 +691,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: Get Astro Environment Info
         id: get-astro-env-info
         uses: ./.github/workflows/e2e/get_astro_env_info
@@ -749,6 +776,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -839,6 +869,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -1092,6 +1125,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
