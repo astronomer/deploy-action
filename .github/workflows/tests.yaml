@@ -45,10 +45,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        deployment: [deployment-hibernate.yaml, deployment.yaml]
+        deployment: [deployment-hibernate.yaml, deployment.yaml, deployment-remote.yaml]
     outputs:
       DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
       HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
+      REMOTE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.REMOTE_DEPLOYMENT_ID }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -95,11 +96,17 @@ jobs:
           sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  e2e-setup/deployment-templates/${{ matrix.deployment }}
 
           DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
-          if [[ "${{ matrix.deployment }}" == "deployment.yaml" ]]; then
-            echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-          else
-            echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-          fi
+          case "${{ matrix.deployment }}" in
+            deployment.yaml)
+              echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+            deployment-hibernate.yaml)
+              echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+            deployment-remote.yaml)
+              echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+          esac
   default-deploy-tests:
     name: Default Deploy Test
     runs-on: ubuntu-latest
@@ -854,6 +861,166 @@ jobs:
           echo "DBT Deploy Action validation failed: DBT bundle was not updated"
           exit 1
 
+  # Remote-execution tests run in parallel to the chain above since they operate on a separate deployment.
+  # The deployment is created with dag_deploy_enabled: false and executor: ASTRO, so the action always
+  # produces an image deploy regardless of which mock is in place.
+  remote-deploy-test:
+    name: Remote Deploy Test
+    runs-on: ubuntu-latest
+    needs: [create-test-deployments]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Run Deploy Action
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          action: deploy
+          deploy-type: image-and-dags
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          # Remote deployments have dag_deploy_enabled: false, so only the image version updates.
+          is_image_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
+
+  remote-custom-image-test:
+    name: Remote Custom Image Test
+    runs-on: ubuntu-latest
+    needs: [remote-deploy-test, create-test-deployments]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Build Docker image
+        run: cd e2e-setup/astro-project && docker build -t custom-remote-image:latest .
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Deploy to Astro
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          image-name: custom-remote-image:latest
+          action: deploy
+          deploy-type: image-and-dags
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          # Remote deployments have dag_deploy_enabled: false, so only the image version updates.
+          is_image_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
+
   # Deployment preview tests can run in parallel to above tests since it operates on a different deployment, so it won't interfere with the above tests
   deployment-preview-test:
     name: Deployment Preview Test
@@ -1132,6 +1299,8 @@ jobs:
         custom-docker-image-test,
         dbt-deploy-test,
         deployment-preview-test,
+        remote-deploy-test,
+        remote-custom-image-test,
       ]
     # ensure that we always try delete the deployment even if any of the tests fail
     if: always()
@@ -1167,5 +1336,13 @@ jobs:
 
       - name: Delete Deployment
         run: |
-          astro deployment delete -f ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
-          astro deployment delete -f ${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          # Each ID is only set if its corresponding deployment was created;
+          # skip the delete when the upstream job didn't produce one.
+          for id in \
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}" \
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}" \
+            "${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}"; do
+            if [[ -n "$id" ]]; then
+              astro deployment delete -f "$id"
+            fi
+          done
