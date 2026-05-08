@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        deployment: [deployment-hibernate.yaml, deployment.yaml, deployment-remote.yaml]
+        deployment: [deployment-hibernate.yaml, deployment.yaml, remote]
     outputs:
       DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
       HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
@@ -92,21 +92,39 @@ jobs:
         id: create-deployment
         run: |
 
-          # Update the deployment name to maintain uniqueness
-          sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  e2e-setup/deployment-templates/${{ matrix.deployment }}
+          if [[ "${{ matrix.deployment }}" == "remote" ]]; then
+            # Remote-execution deployments are created with CLI flags rather than --deployment-file:
+            # astro-cli's fromfile.go only propagates remote_execution to CreateDedicatedDeploymentRequest,
+            # not to CreateStandardDeploymentRequest, so a STANDARD remote deployment created from a YAML
+            # file is rejected by the API for missing worker_queues / resource quotas. The
+            # --remote-execution-enabled flag goes through a separate code path that does set the field.
+            name="deploy-action-remote-e2e-${{ env.test_uid }}"
+            astro deployment create \
+              --type standard \
+              --name "$name" \
+              --executor AstroExecutor \
+              --remote-execution-enabled \
+              --cloud-provider aws \
+              --region us-west-2 \
+              --runtime-version 3.1-14 \
+              --scheduler-size small \
+              --force
+            DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n "$name" --key metadata.deployment_id)
+            echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          else
+            # Update the deployment name to maintain uniqueness
+            sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  e2e-setup/deployment-templates/${{ matrix.deployment }}
 
-          DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
-          case "${{ matrix.deployment }}" in
-            deployment.yaml)
-              echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-              ;;
-            deployment-hibernate.yaml)
-              echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-              ;;
-            deployment-remote.yaml)
-              echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-              ;;
-          esac
+            DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
+            case "${{ matrix.deployment }}" in
+              deployment.yaml)
+                echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+                ;;
+              deployment-hibernate.yaml)
+                echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+                ;;
+            esac
+          fi
   default-deploy-tests:
     name: Default Deploy Test
     runs-on: ubuntu-latest
