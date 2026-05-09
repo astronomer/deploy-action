@@ -93,19 +93,27 @@ jobs:
         run: |
 
           if [[ "${{ matrix.deployment }}" == "remote" ]]; then
-            # Remote-execution deployments are created with CLI flags rather than --deployment-file:
-            # astro-cli's fromfile.go only propagates remote_execution to CreateDedicatedDeploymentRequest,
-            # not to CreateStandardDeploymentRequest, so a STANDARD remote deployment created from a YAML
-            # file is rejected by the API for missing worker_queues / resource quotas. The
-            # --remote-execution-enabled flag goes through a separate code path that does set the field.
+            # Remote-execution deployments must run on a dedicated cluster (the API rejects them
+            # on STANDARD clusters), so we need a cluster ID supplied via secret. If it's not set
+            # — e.g. on forks or repos without the test infra — skip creation; the remote-* test
+            # jobs are gated on REMOTE_DEPLOYMENT_ID being non-empty and will skip in lockstep.
+            #
+            # We also use CLI flags rather than --deployment-file because astro-cli's fromfile.go
+            # only propagates remote_execution to CreateDedicatedDeploymentRequest in some
+            # versions; the --remote-execution-enabled flag goes through a code path that
+            # reliably sets the field.
+            cluster_id="${{ secrets.REMOTE_EXECUTION_CLUSTER_ID }}"
+            if [[ -z "$cluster_id" ]]; then
+              echo "REMOTE_EXECUTION_CLUSTER_ID secret is not set; skipping remote deployment creation."
+              exit 0
+            fi
             name="deploy-action-remote-e2e-${{ env.test_uid }}"
             astro deployment create \
-              --type standard \
+              --type dedicated \
+              --cluster-id "$cluster_id" \
               --name "$name" \
               --executor AstroExecutor \
               --remote-execution-enabled \
-              --cloud-provider aws \
-              --region us-west-2 \
               --runtime-version 3.1-14 \
               --scheduler-size small \
               --force
@@ -886,6 +894,8 @@ jobs:
     name: Remote Deploy Test
     runs-on: ubuntu-latest
     needs: [create-test-deployments]
+    # Skip when the remote dedicated cluster isn't configured for this repo.
+    if: needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID != ''
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -965,6 +975,8 @@ jobs:
     name: Remote Custom Image Test
     runs-on: ubuntu-latest
     needs: [remote-deploy-test, create-test-deployments]
+    # Skip when the remote dedicated cluster isn't configured for this repo.
+    if: needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID != ''
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
