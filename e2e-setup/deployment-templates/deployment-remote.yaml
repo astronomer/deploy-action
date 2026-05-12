@@ -12,7 +12,7 @@ deployment:
     # Remote execution requires the ASTRO executor.
     executor: ASTRO
     workspace_name: Deploy Action E2E
-    # The e2e workflow rewrites cluster_name at runtime from 
+    # The e2e workflow rewrites cluster_name at runtime from
     # secrets.REMOTE_EXECUTION_CLUSTER_NAME before invoking
     # `astro deployment create --deployment-file`.
     deployment_type: DEDICATED

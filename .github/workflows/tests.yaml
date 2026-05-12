@@ -97,8 +97,8 @@ jobs:
           if [[ "${{ matrix.deployment }}" == "deployment-remote.yaml" ]]; then
             cluster_name="${{ secrets.REMOTE_EXECUTION_CLUSTER_NAME }}"
             if [[ -z "$cluster_name" ]]; then
-              echo "REMOTE_EXECUTION_CLUSTER_NAME secret is not set; skipping remote deployment creation."
-              exit 0
+              echo "::error::REMOTE_EXECUTION_CLUSTER_NAME secret is not set on the e2e-test environment. Add the dedicated cluster's name to enable remote-execution e2e tests."
+              exit 1
             fi
             sed -i "s|REMOTE_EXECUTION_CLUSTER_NAME_PLACEHOLDER|$cluster_name|g" "$template"
           fi
