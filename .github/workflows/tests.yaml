@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        deployment: [deployment-hibernate.yaml, deployment.yaml, remote]
+        deployment: [deployment-hibernate.yaml, deployment.yaml, deployment-remote.yaml]
     outputs:
       DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
       HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
@@ -92,47 +92,32 @@ jobs:
         id: create-deployment
         run: |
 
-          if [[ "${{ matrix.deployment }}" == "remote" ]]; then
-            # Remote-execution deployments must run on a dedicated cluster (the API rejects them
-            # on STANDARD clusters), so we need a cluster ID supplied via secret. If it's not set
-            # — e.g. on forks or repos without the test infra — skip creation; the remote-* test
-            # jobs are gated on REMOTE_DEPLOYMENT_ID being non-empty and will skip in lockstep.
-            #
-            # We also use CLI flags rather than --deployment-file because astro-cli's fromfile.go
-            # only propagates remote_execution to CreateDedicatedDeploymentRequest in some
-            # versions; the --remote-execution-enabled flag goes through a code path that
-            # reliably sets the field.
-            cluster_id="${{ secrets.REMOTE_EXECUTION_CLUSTER_ID }}"
-            if [[ -z "$cluster_id" ]]; then
-              echo "REMOTE_EXECUTION_CLUSTER_ID secret is not set; skipping remote deployment creation."
+          template="e2e-setup/deployment-templates/${{ matrix.deployment }}"
+
+          if [[ "${{ matrix.deployment }}" == "deployment-remote.yaml" ]]; then
+            cluster_name="${{ secrets.REMOTE_EXECUTION_CLUSTER_NAME }}"
+            if [[ -z "$cluster_name" ]]; then
+              echo "REMOTE_EXECUTION_CLUSTER_NAME secret is not set; skipping remote deployment creation."
               exit 0
             fi
-            name="deploy-action-remote-e2e-${{ env.test_uid }}"
-            astro deployment create \
-              --type dedicated \
-              --cluster-id "$cluster_id" \
-              --name "$name" \
-              --executor AstroExecutor \
-              --remote-execution-enabled \
-              --runtime-version 3.1-14 \
-              --scheduler-size small \
-              --force
-            DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n "$name" --key metadata.deployment_id)
-            echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-          else
-            # Update the deployment name to maintain uniqueness
-            sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  e2e-setup/deployment-templates/${{ matrix.deployment }}
-
-            DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
-            case "${{ matrix.deployment }}" in
-              deployment.yaml)
-                echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-                ;;
-              deployment-hibernate.yaml)
-                echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-                ;;
-            esac
+            sed -i "s|REMOTE_EXECUTION_CLUSTER_NAME_PLACEHOLDER|$cluster_name|g" "$template"
           fi
+
+          # Update the deployment name to maintain uniqueness
+          sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  "$template"
+
+          DEPLOYMENT_ID=$(astro deployment create --deployment-file "$template" | yq e '.deployment.metadata.deployment_id' -)
+          case "${{ matrix.deployment }}" in
+            deployment.yaml)
+              echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+            deployment-hibernate.yaml)
+              echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+            deployment-remote.yaml)
+              echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+          esac
   default-deploy-tests:
     name: Default Deploy Test
     runs-on: ubuntu-latest
