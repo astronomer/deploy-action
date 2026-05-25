@@ -2,10 +2,6 @@ name: E2E Tests for Astro Deploy Action
 
 on:
   push:
-    branches: [main]
-    paths:
-      - action.yaml
-      - .github/workflows/tests.yaml
   workflow_dispatch:
     inputs:
       cli_version:
