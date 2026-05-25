@@ -82,7 +82,7 @@ inputs:
   deploy-type:
     required: false
     default: "infer"
-    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', or 'dbt'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files."
+    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', 'image-only', or 'dbt'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files. 'image-only' deploys the image without updating DAGs."
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
@@ -98,6 +98,9 @@ inputs:
     required: false
     default: false
     description: "If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec."
+  wait-time:
+    required: false
+    description: "The time to wait for the deployment or deploy operation to finish successfully."
 outputs:
   preview-id:
     description: "The ID of the created deployment preview. Only works when action=create-deployment-preview"
@@ -107,12 +110,13 @@ runs:
   using: "composite"
   steps:
     - name: checkout repo
-      uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       if: inputs.checkout == 'true'
       with:
-        fetch-depth: 0 # Fetch all history
+        fetch-depth: 0  # Fetch all history
         ref: ${{ github.event.after }}
         clean: false
+        persist-credentials: false
         submodules: ${{ inputs.checkout-submodules }}
     - name: Warn about deprecated deploy-image option
       if: inputs.deploy-image == true
@@ -130,15 +134,36 @@ runs:
           CLI_VERSION=$(astro version | awk '{print $4}')
         fi
 
+        # Ensure semver CLI is available for version comparisons
+        if ! command -v semver &> /dev/null; then
+          npm install -g semver
+        fi
+
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
         if [[ "${{ inputs.deploy-type }}" == "dbt" && $CLI_VERSION != "" ]]; then
-          #install semver to compare versions
-          npm install -g semver
-
           REQUIRED_VERSION="1.28.1"
           CURRENT_VERSION=$(astro version | awk '{print $4}')
           if ! semver -r ">${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
             echo "DBT Deploy requires Astro CLI version $REQUIRED_VERSION or higher"
+            exit 1
+          fi
+        fi
+
+        # Check if the Astro CLI version is less than 1.21.0 for image-only deploy
+        if [[ "${{ inputs.deploy-type }}" == "image-only" && $CLI_VERSION != "" ]]; then
+          REQUIRED_VERSION="1.21.0"
+          CURRENT_VERSION=$(astro version | awk '{print $4}')
+          if ! semver -r ">=${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
+            echo "Image-only deploy requires Astro CLI version $REQUIRED_VERSION or higher"
+            exit 1
+          fi
+        fi
+
+        # Check if the Astro CLI version is less than 1.38.0 for wait-time option
+        if [[ "${{ inputs.wait-time }}" != "" && $CLI_VERSION != "" ]]; then
+          REQUIRED_VERSION="1.38.0"
+          if ! semver -r ">=${REQUIRED_VERSION}" "${CLI_VERSION}"; then
+            echo "Wait time option requires Astro CLI version $REQUIRED_VERSION or higher"
             exit 1
           fi
         fi
@@ -149,15 +174,18 @@ runs:
           exit 0
         fi
 
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
         # check if CLI_VERSION does not starts with "v", then add "v" to it
         if [[ $CLI_VERSION != "" && $CLI_VERSION != v* ]]; then
           CLI_VERSION=v$CLI_VERSION
         fi
 
         if [[ $CLI_VERSION == "" ]]; then
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
         else
-          curl -sSL https://install.astronomer.io | sudo bash -s -- $CLI_VERSION
+          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin" "$CLI_VERSION"
         fi
         echo ::endgroup::
       shell: bash
@@ -220,10 +248,26 @@ runs:
           # Add name to deployment template file
           sed -i "s|  name:.*|  name: ${BRANCH_DEPLOYMENT_NAME}|g"  deployment-preview-template.yaml
 
-          # Create new deployment preview based on the deployment template file
-          astro deployment create --deployment-file deployment-preview-template.yaml
+          # Decide whether deployment create can run with --wait based on CLI version
+          CLI_VERSION=$(astro version | awk '{print $4}')
+          REQUIRED_WAIT_VERSION="1.37.0"
 
-          # TODO: we need to add wait for deployment to be created, otherwise operation to copy airflow resources like connection is flaky if webserver is not up by then
+          if command -v semver >/dev/null 2>&1 && [[ -n "$CLI_VERSION" ]] && semver -r ">=${REQUIRED_WAIT_VERSION}" "$CLI_VERSION" >/dev/null 2>&1; then
+            if [[ "${{ inputs.wait-time }}" != "" ]]; then
+              astro deployment create --wait --deployment-file deployment-preview-template.yaml --wait-time "${{ inputs.wait-time }}"
+            else
+              astro deployment create --wait --deployment-file deployment-preview-template.yaml
+            fi
+          else
+            if ! command -v semver >/dev/null 2>&1; then
+              echo "semver CLI not available; continuing without deployment create --wait"
+            elif [[ -z "$CLI_VERSION" ]]; then
+              echo "Unable to determine Astro CLI version; continuing without deployment create --wait"
+            else
+              echo "Astro CLI $CLI_VERSION does not support deployment create --wait; continuing without it"
+            fi
+            astro deployment create --deployment-file deployment-preview-template.yaml
+          fi
 
           # Get final Deployment ID
           echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
@@ -295,7 +339,8 @@ runs:
 
         echo ::group::Determine if DAG Deploy is enabled
         if [[ ${{ inputs.action }} != create-deployment-preview && ${{ inputs.action }} != delete-deployment-preview ]]; then
-          echo "DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.dag_deploy_enabled)" >> $GITHUB_OUTPUT
+          DAG_DEPLOY_ENABLED=$(astro deployment inspect ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --clean-output --key configuration.dag_deploy_enabled)
+          echo "DAG_DEPLOY_ENABLED=${DAG_DEPLOY_ENABLED:-false}" >> $GITHUB_OUTPUT
         else
           echo "DAG_DEPLOY_ENABLED=false" >> $GITHUB_OUTPUT
         fi
@@ -360,7 +405,7 @@ runs:
       shell: bash
       id: dbt-deploy-options
     - name: Get Deploy Type
-      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' }}
+      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'image-only' }}
       run: |
 
         # infer based on files changed to deploy only dags or image and dags
@@ -412,6 +457,9 @@ runs:
             elif [[ ${{ inputs.deploy-type }} == 'image-and-dags' ]]; then
               DAGS_ONLY_DEPLOY=false
               break
+            elif [[ ${{ inputs.deploy-type }} == 'image-only' ]]; then
+              DAGS_ONLY_DEPLOY=false
+              break
             fi
           fi
         done
@@ -426,7 +474,7 @@ runs:
         fi
 
         # check if user has passed a custom image or the action has created a new deployment preview, then we would need to deploy the image
-        if [[ ${{ inputs.image-name }} != "no-custom-image" || ${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }} == false || ${{ inputs.action }} == create-deployment-preview ]]; then
+        if [[ ${{ inputs.image-name }} != "no-custom-image" || "${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }}" == "false" || ${{ inputs.action }} == create-deployment-preview ]]; then
           SKIP_IMAGE_OR_DAGS_DEPLOY=false
           DAGS_ONLY_DEPLOY=false
         fi
@@ -437,31 +485,37 @@ runs:
           DAGS_ONLY_DEPLOY=false
         fi
 
+        IMAGE_ONLY_DEPLOY=false
+        if [[ ${{ inputs.deploy-type }} == 'image-only' && $SKIP_IMAGE_OR_DAGS_DEPLOY == false ]]; then
+          IMAGE_ONLY_DEPLOY=true
+        fi
+
         echo "DAGS_ONLY_DEPLOY=$DAGS_ONLY_DEPLOY" >> $GITHUB_OUTPUT
         echo "SKIP_IMAGE_OR_DAGS_DEPLOY=$SKIP_IMAGE_OR_DAGS_DEPLOY" >> $GITHUB_OUTPUT
+        echo "IMAGE_ONLY_DEPLOY=$IMAGE_ONLY_DEPLOY" >> $GITHUB_OUTPUT
         echo ::endgroup::
       shell: bash
       id: deploy-type
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: Setup image or dags deploy options
-      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' }}
+      if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'image-only' }}
       run: |
 
         echo ::group::Setup image or dags deploy options
         options=""
 
-        # add parse option
-        if [[ ${{ inputs.parse }} == true ]]; then
+        # add parse option (not applicable for image-only deploys)
+        if [[ ${{ inputs.parse }} == true && ${{ inputs.deploy-type }} != "image-only" ]]; then
           options="--parse"
         fi
 
-        # add pytest option
-        if [[ ${{ inputs.pytest }} == true ]]; then
+        # add pytest option (not applicable for image-only deploys)
+        if [[ ${{ inputs.pytest }} == true && ${{ inputs.deploy-type }} != "image-only" ]]; then
           options="$options --pytest --test ${{ inputs.pytest-file }}"
         fi
 
         # add custom image option
-        if [[ ${{ inputs.image-name }} != no-custom-image && inputs.deploy-type != "dags-only" ]]; then
+        if [[ ${{ inputs.image-name }} != no-custom-image && ${{ inputs.deploy-type }} != "dags-only" ]]; then
           options="$options --image-name ${{ inputs.image-name }}"
         fi
 
@@ -532,7 +586,11 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --dags ${{steps.deploy-options.outputs.OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --dags ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
         echo ::endgroup::
       shell: bash
     # If any other files changed or dag deploys is disabled, deploy the entire Astro project
@@ -546,7 +604,28 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.deploy-options.outputs.OPTIONS}}
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
+        echo ::endgroup::
+      shell: bash
+    - name: Image Only Deploy to Astro
+      if: ${{ inputs.deploy-type == 'image-only' && steps.deploy-type.outputs.IMAGE_ONLY_DEPLOY == 'true' }}
+      run: |
+        echo ::group::Image Only Deploy to Astro
+        # Deploy image only, leaving existing DAGs untouched
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --image ${{steps.deploy-options.outputs.OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait --image ${{steps.deploy-options.outputs.OPTIONS}}
+        fi
         echo ::endgroup::
       shell: bash
     - name: DBT Deploy to Astro
@@ -559,7 +638,11 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
+        fi
         echo ::endgroup::
       shell: bash
     - name: Copy Airflow Connections, Variables, and Pools

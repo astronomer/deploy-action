@@ -26,6 +26,7 @@ To use this GitHub action, you need:
 - A Deployment on Astro. See [Create a Deployment](https://docs.astronomer.io/astro/create-deployment).
 - An Organization, Workspace, or Deployment API Token. See [API Tokens](https://docs.astronomer.io/astro/workspace-api-tokens)
 - Or (deprecated) a Deployment API key ID and secret. See [Deployment API keys](https://docs.astronomer.io/astro/api-keys).
+- The [setup-astro-cli](https://github.com/astronomer/setup-astro-cli) action (recommended) to install and manage the Astro CLI in your workflow. See [Installing the Astro CLI](https://github.com/astronomer/deploy-action#installing-the-astro-cli).
 
 > [!TIP]
 > Astronomer recommends using [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) to store `ASTRO_API_TOKEN` or Deployment API Keys. See the example in [Workflow file examples](https://github.com/astronomer/deploy-action#workflow-file-examples).
@@ -34,7 +35,7 @@ To use this GitHub action, you need:
 
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
-1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.4`.
+1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.13.0`.
 2. Configure the workflow to fit your team's use case. This could include creating a deployment preview or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
 3. Make changes to your Astro project files in GitHub and let this GitHub Actions workflow take care of deploying your code to Astro.
 
@@ -49,7 +50,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | Name | Default | Description |
 | ---|---|--- |
 | `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `deploy`, `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. If using `deploy` or `deploy-deployment-preview` one should also specify `deploy-type`. |
-| `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs or DBT project. Possible options are `infer`, `dags-only`, `image-and-dags` or `dbt`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. For description on each deploy type checkout [deploy type details](https://github.com/astronomer/deploy-action#deploy-type-details) |
+| `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs or DBT project. Possible options are `infer`, `dags-only`, `image-and-dags`, `image-only` or `dbt`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. For description on each deploy type checkout [deploy type details](https://github.com/astronomer/deploy-action#deploy-type-details) |
 | `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too. |
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
@@ -68,6 +69,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
 | `cli-version` | `` | The desired Astro CLI version to use. The latest version is used if left unset. |
+| `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
 
 
 ## Outputs
@@ -95,13 +97,90 @@ The following section describe each of the deploy type input value in detail to 
   - if all the file changes are in folders except `dags` folder then it skips deploy
   - otherwise it would do a dag only deploy
 
-4. `dbt`: In this mode, deploy-action would run through all the file changes:
+4. `image-only`: In this mode, deploy-action would run through all the file changes:
+  - if there are no file changes in the configured root-folder then it skips deploy
+  - otherwise it would deploy only the image, leaving existing DAGs on the deployment untouched
+
+5. `dbt`: In this mode, deploy-action would run through all the file changes:
   - if there are no file changes in the configured root-folder then it skips deploy
   - otherwise it would do a dbt deploy
 
 
+## Installing the Astro CLI
+
+Astronomer recommends using the [`setup-astro-cli`](https://github.com/astronomer/setup-astro-cli) action to install and manage the Astro CLI in your workflows. This keeps CLI installation decoupled from deployment logic, lets you pin or update CLI versions independently (including via Dependabot), and allows a single installation to be reused across multiple deploy steps.
+
+Add `setup-astro-cli` as a step **before** any `deploy-action` step in your workflow:
+
+> [!TIP]
+> As a security best practice, Astronomer recommends pinning all third-party actions to a full commit SHA instead of a tag in production workflows. See [GitHub's security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions).
+
+```yaml
+steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.13.0
+  with:
+    deployment-id: <deployment-id>
+```
+
+### Pin to a specific CLI version
+
+```yaml
+steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+  with:
+    version: "1.29.0"
+
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.13.0
+  with:
+    deployment-id: <deployment-id>
+```
+
+### Use an internal mirror or air-gapped runner
+
+```yaml
+steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+  with:
+    download-url: https://mirror.example.com/astro-cli/v1.29.0/astro_linux_amd64.tar.gz
+
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.13.0
+  with:
+    deployment-id: <deployment-id>
+```
+
+### Install once, deploy to multiple environments
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.0.1
+
+    - name: Deploy to Development
+      uses: astronomer/deploy-action@v0.13.0
+      with:
+        deployment-id: <dev-deployment-id>
+
+    - name: Deploy to Staging
+      uses: astronomer/deploy-action@v0.13.0
+      with:
+        deployment-id: <staging-deployment-id>
+```
+
 ## Workflow file examples
 
+> [!TIP]
+> As a security best practice, Astronomer recommends pinning all third-party actions to a full commit SHA instead of a tag in production workflows. See [GitHub's security hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions).
 
 In the following example, the GitHub action deploys code to Astro. This example assumes that you have one Astro Deployment and one branch. When a change is merged to the `main` branch, your Astro project is deployed to Astro. DAG files are parsed on every deploy and no pytests are ran.
 
@@ -121,8 +200,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Install Astro CLI
+      uses: astronomer/setup-astro-cli@v0.0.1
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.10.0
+      uses: astronomer/deploy-action@v0.13.0
       with:
         deployment-id: <deployment id>
         parse: true
@@ -137,7 +218,7 @@ In the following example, the folder `/example-dags/` is specified as the root f
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.13.0
   with:
     deployment-id: <deployment id>
     root-folder: /example-dags/
@@ -150,7 +231,7 @@ In the following example, the pytest located at `/tests/test-tags.py` runs befor
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.13.0
   with:
     deployment-id: <deployment id>
     pytest: true
@@ -164,7 +245,7 @@ In the following example, `force` is enabled and both the DAG parse and pytest p
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.13.0
   with:
     deployment-id: <deployment id>
     force: true
@@ -190,12 +271,12 @@ jobs:
       ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
     steps:
     - name: Check out the repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v6
     - name: Create image tag
       id: image_tag
       run: echo ::set-output name=image_tag::astro-$(date +%Y%m%d%H%M%S)
     - name: Build image
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v6
       with:
         tags: ${{ steps.image_tag.outputs.image_tag }}
         load: true
@@ -207,7 +288,7 @@ jobs:
         build-args: |
           <your-build-arguments>
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.10.0
+      uses: astronomer/deploy-action@v0.13.0
       with:
         deployment-id: <deployment id>
         deploy-type: image-and-dags
@@ -222,7 +303,7 @@ In the following example we would be deploying the dbt project located at `dbt` 
 ```yaml
 steps:
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.13.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
@@ -231,18 +312,22 @@ steps:
 
 ### Deploy DAGs and DBT project from same repo
 
-In the following example we would setup a workflow to deploy dags/images located at `astro-project` and dbt deploy from dbt project located at `dbt` folder in the same Github repo
+In the following example we would setup a workflow to deploy dags/images located at `astro-project` and dbt deploy from dbt project located at `dbt` folder in the same Github repo. The CLI is installed once and reused across both deploy steps.
 
 ```yaml
 steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+  with:
+    version: "1.30.0"  # DBT deploys require CLI >= 1.28.1
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.13.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
     root-folder: dbt
 - name: DAGs/Image Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.13.0
   with:
     deployment-id: <deployment id>
     root-folder: astro-project/
@@ -256,7 +341,7 @@ In the following example, the deployment is woken up from hibernation before dep
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.10.0
+  uses: astronomer/deploy-action@v0.13.0
   with:
     deployment-id: <deployment id>
     wake-on-deploy: true
@@ -292,10 +377,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.10.0
+      uses: astronomer/deploy-action@v0.13.0
       with:
         action: create-deployment-preview
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
+        wait-time: 10m
 ```
 
 ## Deploy to Deployment Preview
@@ -317,10 +403,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.10.0
+      uses: astronomer/deploy-action@v0.13.0
       with:
         action: deploy-deployment-preview
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
 ```
 
 ## DBT Deploy to Deployment Preview
@@ -342,11 +428,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.10.0
+      uses: astronomer/deploy-action@v0.13.0
       with:
         action: deploy-deployment-preview
         deploy-type: dbt
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
         root-folder: dbt
 ```
 
@@ -369,10 +455,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Delete Deployment Preview
-      uses: astronomer/deploy-action@v0.10.0
+      uses: astronomer/deploy-action@v0.13.0
       with:
         action: delete-deployment-preview
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
 ```
 
 ## Deploy to Original Deployment
@@ -394,7 +480,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.10.0
+      uses: astronomer/deploy-action@v0.13.0
       with:
-        deployment-id: <orginal deployment id>
+        deployment-id: <original deployment id>
 ```

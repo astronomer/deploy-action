@@ -7,9 +7,17 @@ on:
       - action.yaml
       - .github/workflows/tests.yaml
   workflow_dispatch:
+    inputs:
+      cli_version:
+        description: "Astro CLI version to pre-install via setup-astro-cli (e.g. 1.38.0). Leave blank for latest."
+        required: false
+        default: ""
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
+  # Consumed by .github/workflows/e2e/patch_action_for_dispatch on workflow_dispatch.
+  DEPLOY_ACTION_DIFF_BEFORE: ${{ github.event.before || 'e2e-fake-before' }}
+  DEPLOY_ACTION_DIFF_AFTER: ${{ github.event.after || 'e2e-fake-after' }}
 
 jobs:
   redact-inputs:
@@ -18,12 +26,14 @@ jobs:
     environment: e2e-test
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Redact Inputs
         run: |
 
-          # add-mask will redact the value of the input, but will still log the value, 
+          # add-mask will redact the value of the input, but will still log the value,
           # hence using a known workaround: https://github.com/actions/runner/issues/643
           WORKSPACE_ID=$(jq -r '.inputs.workspace_id' $GITHUB_EVENT_PATH)
           echo ::add-mask::$WORKSPACE_ID
@@ -41,13 +51,19 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        deployment: [deployment-hibernate.yaml, deployment.yaml]
+        deployment: [deployment-hibernate.yaml, deployment.yaml, deployment-remote.yaml]
     outputs:
       DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
       HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
+      REMOTE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.REMOTE_DEPLOYMENT_ID }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -62,12 +78,17 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
         run: |
 
-          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
-
-          curl -sSL https://install.astronomer.io | sudo bash -s
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O "$HOME/.local/bin/yq" && chmod +x "$HOME/.local/bin/yq"
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
@@ -79,15 +100,32 @@ jobs:
         id: create-deployment
         run: |
 
-          # Update the deployment name to maintain uniqueness
-          sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  e2e-setup/deployment-templates/${{ matrix.deployment }}
+          template="e2e-setup/deployment-templates/${{ matrix.deployment }}"
 
-          DEPLOYMENT_ID=$(astro deployment create --deployment-file e2e-setup/deployment-templates/${{ matrix.deployment }} | yq e '.deployment.metadata.deployment_id' -)
-          if [[ "${{ matrix.deployment }}" == "deployment.yaml" ]]; then
-            echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-          else
-            echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          if [[ "${{ matrix.deployment }}" == "deployment-remote.yaml" ]]; then
+            cluster_name="${{ secrets.REMOTE_EXECUTION_CLUSTER_NAME }}"
+            if [[ -z "$cluster_name" ]]; then
+              echo "::error::REMOTE_EXECUTION_CLUSTER_NAME secret is not set on the e2e-test environment. Add the dedicated cluster's name to enable remote-execution e2e tests."
+              exit 1
+            fi
+            sed -i "s|REMOTE_EXECUTION_CLUSTER_NAME_PLACEHOLDER|$cluster_name|g" "$template"
           fi
+
+          # Update the deployment name to maintain uniqueness
+          sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  "$template"
+
+          DEPLOYMENT_ID=$(astro deployment create --deployment-file "$template" | yq e '.deployment.metadata.deployment_id' -)
+          case "${{ matrix.deployment }}" in
+            deployment.yaml)
+              echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+            deployment-hibernate.yaml)
+              echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+            deployment-remote.yaml)
+              echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+          esac
   default-deploy-tests:
     name: Default Deploy Test
     runs-on: ubuntu-latest
@@ -103,7 +141,12 @@ jobs:
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -118,13 +161,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+        run: sudo apt-get install jq
 
       - name: Mock git commands
         run: |
@@ -136,9 +179,14 @@ jobs:
             mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
           fi
           chmod +x /usr/local/bin/git
-          cp /usr/local/bin/astro /usr/local/bin/astro-original
-          mv e2e-setup/mocks/astro-deploy.sh /usr/local/bin/astro
-          chmod +x /usr/local/bin/astro
+
+          # Stash the real astro at the path the astro-deploy.sh mock expects, then
+          # shadow `astro` on PATH with the mock by placing it earlier in PATH.
+          mkdir -p "$HOME/.local/bin"
+          cp "$(command -v astro)" "$HOME/.local/bin/astro-original"
+          mv e2e-setup/mocks/astro-deploy.sh "$HOME/.local/bin/astro"
+          chmod +x "$HOME/.local/bin/astro"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -194,7 +242,12 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -214,12 +267,13 @@ jobs:
           mv e2e-setup/mocks/dag-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
 
-      - name: Install dependencies
-        run: |
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
 
-          sudo apt-get install jq
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+      - name: Install dependencies
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -276,7 +330,12 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -291,13 +350,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -364,7 +423,12 @@ jobs:
         deploy_type: [dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -390,13 +454,13 @@ jobs:
           fi
           chmod +x /usr/local/bin/git
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -441,8 +505,8 @@ jobs:
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
           hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
-  no-deploy-test:
-    name: No Deploy Test
+  image-only-deploy-test:
+    name: Image Only Deploy Test
     runs-on: ubuntu-latest
     needs: [infer-deploy, create-test-deployments]
     strategy:
@@ -452,10 +516,14 @@ jobs:
             "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
             "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
           ]
-        deploy_type: [infer, dbt, dags, image-and-dags]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -470,13 +538,104 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
-      - name: Setup dependencies
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Mock git commands
         run: |
+          mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
 
-          sudo apt-get install jq
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Run Deploy Action
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          action: deploy
+          deploy-type: image-only
+          root-folder: e2e-setup/astro-project
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_image_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
+
+  no-deploy-test:
+    name: No Deploy Test
+    runs-on: ubuntu-latest
+    needs: [image-only-deploy-test, create-test-deployments]
+    strategy:
+      max-parallel: 1
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
+        deploy_type: [infer, dbt, dags, image-and-dags, image-only]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Setup dependencies
+        run: sudo apt-get install jq
 
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -568,7 +727,12 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -583,13 +747,13 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
-        run: |
-
-          sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
+        run: sudo apt-get install jq
 
       - name: Build Docker image
         run: cd e2e-setup/astro-project && docker build -t custom-image:latest .
@@ -651,7 +815,12 @@ jobs:
           ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -671,13 +840,16 @@ jobs:
           mv e2e-setup/mocks/dbt-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
         id: setup
         run: |
 
           sudo apt-get install jq
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
 
           test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
           echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
@@ -724,21 +896,21 @@ jobs:
           echo "DBT Deploy Action validation failed: DBT bundle was not updated"
           exit 1
 
-  # Deployment preview tests can run in parallel to above tests since it operates on a different deployment, so it won't interfere with the above tests
-  deployment-preview-test:
-    name: Deployment Preview Test
+  # Remote-execution tests run in parallel to the chain above since they operate on a separate deployment.
+  # The deployment is created with dag_deploy_enabled: false and executor: ASTRO, so the action always
+  # produces an image deploy regardless of which mock is in place.
+  remote-deploy-test:
+    name: Remote Deploy Test
     runs-on: ubuntu-latest
     needs: [create-test-deployments]
-    strategy:
-      matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+    # Skip when the remote dedicated cluster isn't configured for this repo.
+    if: needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID != ''
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -753,14 +925,185 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/image-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Run Deploy Action
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          action: deploy
+          deploy-type: image-and-dags
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          # Remote deployments have dag_deploy_enabled: false, so only the image version updates.
+          is_image_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
+
+  remote-custom-image-test:
+    name: Remote Custom Image Test
+    runs-on: ubuntu-latest
+    needs: [remote-deploy-test, create-test-deployments]
+    # Skip when the remote dedicated cluster isn't configured for this repo.
+    if: needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID != ''
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Build Docker image
+        run: cd e2e-setup/astro-project && docker build -t custom-remote-image:latest .
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Get Deployment Info Before Test
+        id: get-deployment-before
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Deploy to Astro
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          image-name: custom-remote-image:latest
+          action: deploy
+          deploy-type: image-and-dags
+          root-folder: e2e-setup/astro-project
+
+      - name: Get Deployment Info After Test
+        id: get-deployment-after
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate Deploy Action
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          # Remote deployments have dag_deploy_enabled: false, so only the image version updates.
+          is_image_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
+
+  # Deployment preview tests can run in parallel to above tests since it operates on a different deployment, so it won't interfere with the above tests
+  deployment-preview-test:
+    name: Deployment Preview Test
+    runs-on: ubuntu-latest
+    needs: [create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
       - name: Install dependencies
         id: setup
         run: |
 
           sudo apt-get install jq
-
-          # we need to pre-install the CLI to set the context
-          curl -sSL https://install.astronomer.io | sudo bash -s
 
           test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
           echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
@@ -782,6 +1125,7 @@ jobs:
           copy-airflow-variables: false
           copy-pools: false
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-create-preview
@@ -818,6 +1162,9 @@ jobs:
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
+      - name: Re-patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: Deploy to Deployment Preview
         id: deployment-preview-deploy
         uses: ./
@@ -829,6 +1176,7 @@ jobs:
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-deploy-preview
@@ -865,6 +1213,9 @@ jobs:
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
+      - name: Re-patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: DAG Deploy to Astro
         id: deployment-preview-dag-deploy
         uses: ./
@@ -877,6 +1228,7 @@ jobs:
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get Deployment Info After DAG Deploy Test
         id: get-deployment-after-dag-deploy
@@ -905,6 +1257,9 @@ jobs:
           mv e2e-setup/mocks/dbt-deploy-git.sh /usr/local/bin/git
           chmod +x /usr/local/bin/git
 
+      - name: Re-patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       - name: DBT Deploy to Astro
         id: deployment-preview-dbt-deploy
         uses: ./
@@ -917,6 +1272,7 @@ jobs:
           root-folder: e2e-setup/dbt
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
@@ -945,6 +1301,10 @@ jobs:
 
           echo "DBT Deploy Action validation failed: DBT bundle was not updated"
           exit 1
+
+      - name: Re-patch deploy-action for manual dispatch
+        if: always()
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Delete Deployment Preview
         id: delete-deployment-preview
@@ -980,12 +1340,19 @@ jobs:
         custom-docker-image-test,
         dbt-deploy-test,
         deployment-preview-test,
+        remote-deploy-test,
+        remote-custom-image-test,
       ]
     # ensure that we always try delete the deployment even if any of the tests fail
     if: always()
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       - name: Get Astro Environment Info
         id: get-astro-env-info
@@ -1000,13 +1367,25 @@ jobs:
           secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
           secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
 
-      - name: Install Astro CLI and set context
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Set CLI context
         run: |
-          curl -sSL https://install.astronomer.io | sudo bash -s
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
       - name: Delete Deployment
         run: |
-          astro deployment delete -f ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
-          astro deployment delete -f ${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          # Each ID is only set if its corresponding deployment was created;
+          # skip the delete when the upstream job didn't produce one.
+          for id in \
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}" \
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}" \
+            "${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}"; do
+            if [[ -n "$id" ]]; then
+              astro deployment delete -f "$id"
+            fi
+          done

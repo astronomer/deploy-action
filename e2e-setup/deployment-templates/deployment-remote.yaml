@@ -1,0 +1,18 @@
+deployment:
+  configuration:
+    name: deploy-action-remote-e2e
+    runtime_version: 3.1-14
+    # Remote-execution deployments don't support DAG-only deploys; omitting this
+    # would default to true on hosted orgs and the API would reject the create.
+    dag_deploy_enabled: false
+    # Remote execution requires the ASTRO executor.
+    executor: ASTRO
+    workspace_name: Deploy Action E2E
+    # Remote execution is only supported on DEDICATED clusters. The e2e workflow
+    # rewrites cluster_name at runtime from secrets.REMOTE_EXECUTION_CLUSTER_NAME
+    # before invoking `astro deployment create --deployment-file`.
+    deployment_type: DEDICATED
+    cluster_name: REMOTE_EXECUTION_CLUSTER_NAME_PLACEHOLDER
+    scheduler_size: SMALL
+    remote_execution:
+      enabled: true
