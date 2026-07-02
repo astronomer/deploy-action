@@ -94,6 +94,13 @@ inputs:
     required: false
     default: false
     description: "Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`."
+  sparse-checkout:
+    required: false
+    default: ""
+    description: >
+      Comma- or newline-separated list of cone-mode sparse-checkout patterns passed to actions/checkout.
+      When set, only the listed paths (plus repo-root files) are checked out, which can reduce checkout size for monorepos.
+      Works only when `checkout` is set to `true`. Leave empty for a full checkout (default).
   wake-on-deploy:
     required: false
     default: false
@@ -118,6 +125,7 @@ runs:
         clean: false
         persist-credentials: false
         submodules: ${{ inputs.checkout-submodules }}
+        sparse-checkout: ${{ inputs.sparse-checkout }}
     - name: Warn about deprecated deploy-image option
       if: inputs.deploy-image == true
       shell: bash
