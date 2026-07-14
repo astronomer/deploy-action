@@ -83,6 +83,23 @@ inputs:
     required: false
     default: "infer"
     description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', 'image-only', or 'dbt'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files. 'image-only' deploys the image without updating DAGs."
+  image-trigger-paths:
+    required: false
+    default: ""
+    description: >
+      Comma- or newline-separated list of paths outside `root-folder` that should also trigger a deploy when changed.
+      Useful in monorepos where files built or copied into the image at deploy time (e.g. generated protos) live outside
+      the Astro project. A change under any of these paths forces an image deploy instead of being skipped. Paths are
+      matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory
+      (e.g. `proto/`). Only applies to the `infer`, `image-and-dags`, and `image-only` deploy types.
+  skip-unchanged:
+    required: false
+    default: true
+    description: >
+      When true (default), the action skips the deploy if no changed files fall under `root-folder` (or `image-trigger-paths`).
+      Set to false to disable this diff-based skip and always run the deploy dictated by `deploy-type` on every run. This is
+      the closest replacement for the deprecated `deploy-image: true` behavior. Only applies to the `infer`, `dags-only`,
+      `image-and-dags`, and `image-only` deploy types.
   build-secrets:
     required: false
     description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
@@ -205,6 +222,18 @@ runs:
         # validate action input
         if [[ ${{ inputs.action }} != create-deployment-preview && ${{ inputs.action }} != delete-deployment-preview && ${{ inputs.action }} != deploy-deployment-preview && ${{ inputs.action }} != deploy ]]; then
           echo ERROR: you specified an improper action input. Action must be deploy, deploy-deployment-preview, create-deployment-preview, or delete-deployment-preview.
+          exit 1 # terminate and indicate error
+        fi
+
+        # validate deploy-type-specific inputs
+        # image-trigger-paths only affects image deploys, so it's a no-op for dags-only and dbt
+        if [[ -n "${{ inputs.image-trigger-paths }}" && ( "${{ inputs.deploy-type }}" == "dags-only" || "${{ inputs.deploy-type }}" == "dbt" ) ]]; then
+          echo "ERROR: image-trigger-paths is only supported with deploy-type infer, image-and-dags, or image-only"
+          exit 1 # terminate and indicate error
+        fi
+        # skip-unchanged gates the image/dags diff skip, which the dbt deploy path doesn't use
+        if [[ "${{ inputs.skip-unchanged }}" == "false" && "${{ inputs.deploy-type }}" == "dbt" ]]; then
+          echo "ERROR: skip-unchanged is only supported with deploy-type infer, dags-only, image-and-dags, or image-only"
           exit 1 # terminate and indicate error
         fi
 
@@ -420,7 +449,17 @@ runs:
 
         DAGS_ONLY_DEPLOY=false
         SKIP_IMAGE_OR_DAGS_DEPLOY=false
+        IMAGE_TRIGGER_MATCHED=false
         files=()
+
+        # collect image-trigger-paths (comma- or newline-separated), trimmed and non-empty
+        IMAGE_TRIGGER_PATHS="${{ inputs.image-trigger-paths }}"
+        IMAGE_TRIGGERS=()
+        while IFS= read -r trigger; do
+          trigger="${trigger#"${trigger%%[![:space:]]*}"}"
+          trigger="${trigger%"${trigger##*[![:space:]]}"}"
+          [[ -n "$trigger" ]] && IMAGE_TRIGGERS+=("$trigger")
+        done <<< "${IMAGE_TRIGGER_PATHS//,/$'\n'}"
 
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
@@ -441,6 +480,15 @@ runs:
         fi
 
         for file in $files; do
+          # changes under any configured image-trigger-path force a full image deploy, even when
+          # the file lives outside root-folder (e.g. generated protos baked into the image at build time)
+          for trigger in "${IMAGE_TRIGGERS[@]}"; do
+            if [[ $file == "$trigger"* ]]; then
+              echo "$file matches image-trigger-path '$trigger', forcing an image deploy"
+              IMAGE_TRIGGER_MATCHED=true
+            fi
+          done
+
           if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
             echo $file is part of the input root folder
             SKIP_IMAGE_OR_DAGS_DEPLOY=false
@@ -480,6 +528,22 @@ runs:
         if [[ ${{ inputs.image-name }} != "no-custom-image" || "${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }}" == "false" || ${{ inputs.action }} == create-deployment-preview ]]; then
           SKIP_IMAGE_OR_DAGS_DEPLOY=false
           DAGS_ONLY_DEPLOY=false
+        fi
+
+        # a change under image-trigger-paths forces a full image deploy, even if nothing under root-folder changed
+        if [[ $IMAGE_TRIGGER_MATCHED == true ]]; then
+          SKIP_IMAGE_OR_DAGS_DEPLOY=false
+          DAGS_ONLY_DEPLOY=false
+        fi
+
+        # skip-unchanged=false disables the diff-based skip entirely and always honors deploy-type
+        if [[ "${{ inputs.skip-unchanged }}" == "false" ]]; then
+          SKIP_IMAGE_OR_DAGS_DEPLOY=false
+          # for dags-only, ensure the dag deploy runs even when nothing under root-folder changed;
+          # other deploy types keep their already-inferred image/dags decision
+          if [[ ${{ inputs.deploy-type }} == 'dags-only' ]]; then
+            DAGS_ONLY_DEPLOY=true
+          fi
         fi
 
         if [[ ${{ inputs.action }} == delete-deployment-preview ]]; then

@@ -51,6 +51,8 @@ The following table lists the configuration options for the Deploy to Astro acti
 | ---|---|--- |
 | `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `deploy`, `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. If using `deploy` or `deploy-deployment-preview` one should also specify `deploy-type`. |
 | `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs or DBT project. Possible options are `infer`, `dags-only`, `image-and-dags`, `image-only` or `dbt`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. For description on each deploy type checkout [deploy type details](https://github.com/astronomer/deploy-action#deploy-type-details) |
+| `image-trigger-paths` | `` | Comma- or newline-separated list of paths outside `root-folder` that should also trigger a deploy when changed. Useful in monorepos where files built or copied into the image at deploy time (e.g. generated protos) live outside the Astro project. A change under any of these paths forces an image deploy instead of being skipped. Paths are matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory (e.g. `proto/`). Only applies to the `infer`, `image-and-dags`, and `image-only` deploy types. |
+| `skip-unchanged` | `true` | When `true` (default), the action skips the deploy if no changed files fall under `root-folder` (or `image-trigger-paths`). Set to `false` to disable this diff-based skip and always run the deploy dictated by `deploy-type`. This is the closest replacement for the deprecated `deploy-image: true` behavior. Only applies to the `infer`, `dags-only`, `image-and-dags`, and `image-only` deploy types. |
 | `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too. |
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
@@ -105,6 +107,34 @@ The following section describe each of the deploy type input value in detail to 
 5. `dbt`: In this mode, deploy-action would run through all the file changes:
   - if there are no file changes in the configured root-folder then it skips deploy
   - otherwise it would do a dbt deploy
+
+### Deploying on changes outside `root-folder`
+
+By default the deploy is skipped when no changed files fall under `root-folder`. In monorepos, some files that end up in the
+image are built or copied in at deploy time and live outside the Astro project (e.g. generated protos), so a change to them
+would otherwise be skipped. Two inputs cover this:
+
+- `image-trigger-paths`: list the extra paths that feed the image. A change under any of them forces an image deploy while
+  still skipping genuinely unrelated pushes. Applies to `infer`, `image-and-dags`, and `image-only`.
+
+  ```yaml
+  with:
+    root-folder: airflow
+    deploy-type: image-and-dags
+    image-trigger-paths: |
+      proto/
+      shared/schemas/
+  ```
+
+- `skip-unchanged: false`: disables the diff-based skip entirely, so the deploy dictated by `deploy-type` runs on every
+  invocation. This is the closest replacement for the deprecated `deploy-image: true`.
+
+  ```yaml
+  with:
+    root-folder: airflow
+    deploy-type: image-and-dags
+    skip-unchanged: false
+  ```
 
 
 ## Installing the Astro CLI
