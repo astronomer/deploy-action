@@ -394,10 +394,8 @@ runs:
           cd ${{ inputs.root-folder }}
         fi
 
-        branch=$(echo "${GITHUB_REF#refs/heads/}")
-        echo "Branch pushed to: $branch"
-        git fetch origin $branch
-
+        # the diff below relies on history already present from the fetch-depth: 0 checkout;
+        # don't add a `git fetch` here, it fails on private repos due to persist-credentials: false
         DBT_DEPLOY=false
 
         # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the dbt project because we cannot determine that it does not need to be deployed
@@ -468,8 +466,8 @@ runs:
           echo "Manual workflow dispatch or a new branch or tag creation, hence missing github event before and/or after commit hash"
         else
           echo "event that triggered the workflow: $GITHUB_REF"
-          branch=$(echo "${GITHUB_REF#refs/heads/}")
-          git fetch origin $branch
+          # history is already present from the fetch-depth: 0 checkout, so no fetch is needed;
+          # a `git fetch` here would also fail on private repos due to persist-credentials: false
           if ! git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
             echo "Commit ${{ github.event.before }} does not exist, falling back to image deploy."
           else
