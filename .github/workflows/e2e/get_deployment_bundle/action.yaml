@@ -1,0 +1,82 @@
+name: Get Deployment Bundle
+description: >
+  Look up a single bundle registered on a Deployment, by DAG bundle name or by
+  non-DAG mount path, and report its versions. Unlike get_bundle_info (which
+  reads the deploy history) this reads the bundle itself, so it can also report
+  that a bundle does not exist — which is what the skip-path tests assert.
+inputs:
+  deployment_id:
+    description: The deployment ID
+    required: true
+  organization_id:
+    description: The organization ID
+    required: true
+  astro_api_token:
+    description: The Astronomer API token
+    required: true
+  astronomer_host:
+    description: The Astronomer host
+    required: true
+  bundle_name:
+    description: Name of the DAG bundle to look up. Mutually exclusive with mount_path.
+    default: ""
+  mount_path:
+    description: Mount path of the non-DAG bundle to look up. Mutually exclusive with bundle_name.
+    default: ""
+
+outputs:
+  found:
+    description: Whether a matching bundle exists on the Deployment
+    value: ${{ steps.get-deployment-bundle.outputs.found }}
+  bundle_id:
+    description: The ID of the matching bundle, empty when not found
+    value: ${{ steps.get-deployment-bundle.outputs.bundle_id }}
+  current_version:
+    description: The version the Deployment is currently serving, empty when not found
+    value: ${{ steps.get-deployment-bundle.outputs.current_version }}
+  desired_version:
+    description: The version the Deployment has been asked to serve, empty when not found
+    value: ${{ steps.get-deployment-bundle.outputs.desired_version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get Deployment Bundle
+      id: get-deployment-bundle
+      shell: bash
+      env:
+        BUNDLE_NAME: ${{ inputs.bundle_name }}
+        MOUNT_PATH: ${{ inputs.mount_path }}
+      run: |
+        if [[ -n "$BUNDLE_NAME" && -n "$MOUNT_PATH" ]] || [[ -z "$BUNDLE_NAME" && -z "$MOUNT_PATH" ]]; then
+          echo "Specify exactly one of bundle_name or mount_path"
+          exit 1
+        fi
+
+        STATUS_CODE=$(curl -s -w "%{http_code}" -o response.json -H "Authorization: Bearer ${{ inputs.astro_api_token }}" "https://api.${{ inputs.astronomer_host }}/v1alpha1/organizations/${{ inputs.organization_id }}/deployments/${{ inputs.deployment_id }}/bundles")
+        if [[ $STATUS_CODE -ne 200 ]]; then
+          echo "Failed to get expected status code from List Bundles API. Status code: $STATUS_CODE"
+          cat response.json
+          exit 1
+        fi
+
+        if [[ -n "$BUNDLE_NAME" ]]; then
+          bundle=$(jq -c --arg name "$BUNDLE_NAME" '.bundles[] | select(.isDagBundle == true and .name == $name)' response.json | head -n 1)
+        else
+          bundle=$(jq -c --arg path "$MOUNT_PATH" '.bundles[] | select(.isDagBundle != true and .nonDagMountPath == $path)' response.json | head -n 1)
+        fi
+
+        if [[ -z "$bundle" ]]; then
+          echo "No matching bundle found on deployment ${{ inputs.deployment_id }}"
+          echo "found=false" >> $GITHUB_OUTPUT
+          echo "bundle_id=" >> $GITHUB_OUTPUT
+          echo "current_version=" >> $GITHUB_OUTPUT
+          echo "desired_version=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "Matched bundle: $bundle"
+        echo "found=true" >> $GITHUB_OUTPUT
+        echo "bundle_id=$(echo "$bundle" | jq -r '.id')" >> $GITHUB_OUTPUT
+        echo "current_version=$(echo "$bundle" | jq -r '.currentVersion // ""')" >> $GITHUB_OUTPUT
+        echo "desired_version=$(echo "$bundle" | jq -r '.desiredVersion // ""')" >> $GITHUB_OUTPUT

@@ -16,6 +16,9 @@ inputs:
   expected_status_code:
     description: The expected status code
     default: 200
+  bundle_type:
+    description: The bundle type to look for among the deployment's bundle deploys
+    default: dbt
 
 outputs:
   desired_bundle_version:
@@ -48,9 +51,9 @@ runs:
         # sort by updatedAt to fetch the latest deploy object
         cat response.json | jq '.deploys | sort_by(.updatedAt)' > response_sorted.json
 
-        desired_bundle_version=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .bundles[0].desiredVersion' | head -n 1)
-        bundle_type=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .bundles[0].bundleType' | head -n 1)
-        updated_at=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .updatedAt' | head -n 1)
+        desired_bundle_version=$(cat response_sorted.json | jq -r --arg bundle_type "${{ inputs.bundle_type }}" '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == $bundle_type) | .bundles[0].desiredVersion' | head -n 1)
+        bundle_type=$(cat response_sorted.json | jq -r --arg bundle_type "${{ inputs.bundle_type }}" '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == $bundle_type) | .bundles[0].bundleType' | head -n 1)
+        updated_at=$(cat response_sorted.json | jq -r --arg bundle_type "${{ inputs.bundle_type }}" '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == $bundle_type) | .updatedAt' | head -n 1)
 
         echo "desired_bundle_version=$desired_bundle_version" >> $GITHUB_OUTPUT
         echo "bundle_type=$bundle_type" >> $GITHUB_OUTPUT

@@ -1,7 +1,7 @@
 deployment:
   configuration:
     name: deploy-action-remote-e2e
-    runtime_version: 3.1-14
+    runtime_version: 3.3-2
     # Remote-execution deployments don't support DAG-only deploys; omitting this
     # would default to true on hosted orgs and the API would reject the create.
     dag_deploy_enabled: false

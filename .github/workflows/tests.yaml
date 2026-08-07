@@ -892,6 +892,486 @@ jobs:
           echo "DBT Deploy Action validation failed: DBT bundle was not updated"
           exit 1
 
+  non-dags-deploy-test:
+    name: Non-DAG Bundle Deploy Test
+    runs-on: ubuntu-latest
+    needs: [dbt-deploy-test, create-test-deployments]
+    strategy:
+      matrix:
+        deployment_id:
+          [
+            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
+            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
+          ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/non-dags-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        id: setup
+        run: |
+
+          sudo apt-get install jq
+
+          test_start_time=$(date -u +"%Y-%m-%dT%H:%M:%S.%NZ")
+          echo "test_start_time=$test_start_time" >> $GITHUB_OUTPUT
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Non-DAG Bundle Deploy to Astro
+        uses: ./
+        with:
+          deployment-id: ${{ matrix.deployment_id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          root-folder: e2e-setup/non-dags
+          deploy-type: non-dags
+          mount-path: /usr/local/airflow/e2e-non-dags
+          bundle-type: e2e-non-dags
+          description: "test-non-dags-deploy-action"
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
+
+      - name: Get non-DAG bundle info
+        id: get-non-dags-bundle-info
+        uses: ./.github/workflows/e2e/get_bundle_info
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_type: e2e-non-dags
+
+      - name: Get non-DAG bundle by mount path
+        id: get-non-dags-bundle
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ matrix.deployment_id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          mount_path: /usr/local/airflow/e2e-non-dags
+
+      - name: Validate Non-DAG Bundle Deploy Action
+        id: validate-non-dags-deploy-action
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-non-dags-bundle-info.outputs.desired_bundle_version }}" == "" ]]; then
+            echo "Non-DAG Bundle Deploy Action validation failed: bundle not found"
+            exit 1
+          fi
+
+          # the bundle must exist at the requested mount path, which is what DAGs reference at runtime
+          if [[ "${{ steps.get-non-dags-bundle.outputs.found }}" != "true" ]]; then
+            echo "Non-DAG Bundle Deploy Action validation failed: no bundle mounted at /usr/local/airflow/e2e-non-dags"
+            exit 1
+          fi
+
+          updated_at=$(date -u -d "${{ steps.get-non-dags-bundle-info.outputs.updated_at }}" +"%s.%N")
+          test_start_time=$(date -u -d "${{ steps.setup.outputs.test_start_time }}" +"%s.%N")
+          if [[ $(echo "$updated_at > $test_start_time" | bc -l) ]]; then
+            echo "Non-DAG Bundle Deploy Action validation succeeded: bundle found"
+            exit 0
+          fi
+
+          echo "Non-DAG Bundle Deploy Action validation failed: bundle was not updated"
+          exit 1
+
+  # Deploys DAGs served from a non-default path into a named DAG bundle, which the deploy does not
+  # create — so the bundle is registered up front with `astro deployment bundle create`.
+  named-dag-bundle-test:
+    name: Named DAG Bundle Deploy Test
+    runs-on: ubuntu-latest
+    needs: [non-dags-deploy-test, create-test-deployments]
+    env:
+      DAG_BUNDLE_NAME: e2e-team-a
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      # must happen before the deploy, and before the git mock is installed, since the CLI reads git metadata
+      - name: Create the named DAG bundle
+        run: |
+          astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          astro deployment bundle create --deployment-id ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }} --name "$DAG_BUNDLE_NAME"
+
+      - name: Get named DAG bundle before test
+        id: get-bundle-before
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-team-a
+
+      # the changed file lives under teams/a/dags, not the project's dags/ folder, so this only
+      # produces a DAG deploy if dags-path is honored by the deploy-type inference
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/named-bundle-dag-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Deploy DAGs to the named bundle
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          deploy-type: dags-only
+          root-folder: e2e-setup/astro-project
+          dags-path: teams/a/dags
+          dag-bundle-name: e2e-team-a
+          no-dags-base-dir: true
+          description: "test-named-dag-bundle-deploy-action"
+          wait-time: 300s
+
+      - name: Get named DAG bundle after test
+        id: get-bundle-after
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-team-a
+
+      - name: Validate Named DAG Bundle Deploy Action
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-bundle-after.outputs.found }}" != "true" ]]; then
+            echo "Named DAG Bundle validation failed: bundle $DAG_BUNDLE_NAME not found on the deployment"
+            exit 1
+          fi
+
+          before="${{ steps.get-bundle-before.outputs.desired_version }}"
+          after="${{ steps.get-bundle-after.outputs.desired_version }}"
+          echo "desired version before: '$before', after: '$after'"
+
+          if [[ "$after" == "" ]]; then
+            echo "Named DAG Bundle validation failed: DAGs were not deployed to the named bundle"
+            exit 1
+          fi
+
+          if [[ "$after" == "$before" ]]; then
+            echo "Named DAG Bundle validation failed: bundle version did not change"
+            exit 1
+          fi
+
+          echo "Named DAG Bundle validation succeeded: DAGs landed in $DAG_BUNDLE_NAME"
+
+      - name: Delete the named DAG bundle
+        if: always()
+        continue-on-error: true
+        run: |
+          astro deployment bundle delete --deployment-id ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }} --name "$DAG_BUNDLE_NAME" --force
+
+  # Asserts the skip side of the bundle deploy decision: no change under root-folder means no deploy,
+  # unless skip-unchanged is off or a bundle-trigger-path matched. The git mock reports README.md.
+  bundle-skip-test:
+    name: Bundle Deploy Skip Test
+    runs-on: ubuntu-latest
+    needs: [named-dag-bundle-test, create-test-deployments]
+    env:
+      MOUNT_PATH: /usr/local/airflow/e2e-skip
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/no-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      # nothing under root-folder changed, so this must not deploy
+      - name: Deploy with no relevant changes
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          root-folder: e2e-setup/non-dags
+          deploy-type: non-dags
+          mount-path: /usr/local/airflow/e2e-skip
+          bundle-type: e2e-skip
+          description: "test-bundle-skip-action"
+
+      - name: Get bundle after skipped deploy
+        id: get-bundle-skipped
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          mount_path: /usr/local/airflow/e2e-skip
+
+      - name: Validate the deploy was skipped
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-bundle-skipped.outputs.found }}" == "true" ]]; then
+            echo "Bundle skip validation failed: a bundle was deployed at $MOUNT_PATH despite no relevant changes"
+            exit 1
+          fi
+          echo "Bundle skip validation succeeded: no bundle deployed"
+
+      # same unchanged tree, but a matching bundle-trigger-path must force the deploy
+      - name: Deploy via bundle-trigger-paths
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          root-folder: e2e-setup/non-dags
+          deploy-type: non-dags
+          mount-path: /usr/local/airflow/e2e-skip
+          bundle-type: e2e-skip
+          bundle-trigger-paths: README.md
+          description: "test-bundle-trigger-paths-action"
+          wait-time: 300s
+
+      - name: Get bundle after trigger-path deploy
+        id: get-bundle-triggered
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          mount_path: /usr/local/airflow/e2e-skip
+
+      - name: Validate bundle-trigger-paths forced the deploy
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-bundle-triggered.outputs.found }}" != "true" ]]; then
+            echo "bundle-trigger-paths validation failed: no bundle deployed at $MOUNT_PATH"
+            exit 1
+          fi
+          echo "bundle-trigger-paths validation succeeded: version ${{ steps.get-bundle-triggered.outputs.desired_version }}"
+
+      # same unchanged tree again, this time skip-unchanged=false must force a fresh deploy
+      - name: Deploy with skip-unchanged disabled
+        uses: ./
+        with:
+          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          root-folder: e2e-setup/non-dags
+          deploy-type: non-dags
+          mount-path: /usr/local/airflow/e2e-skip
+          bundle-type: e2e-skip
+          skip-unchanged: false
+          description: "test-bundle-skip-unchanged-action"
+          wait-time: 300s
+
+      - name: Get bundle after skip-unchanged deploy
+        id: get-bundle-forced
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          mount_path: /usr/local/airflow/e2e-skip
+
+      - name: Validate skip-unchanged=false forced the deploy
+        shell: bash
+        run: |
+          before="${{ steps.get-bundle-triggered.outputs.desired_version }}"
+          after="${{ steps.get-bundle-forced.outputs.desired_version }}"
+          echo "desired version before: '$before', after: '$after'"
+
+          if [[ "$after" == "" || "$after" == "$before" ]]; then
+            echo "skip-unchanged validation failed: bundle was not redeployed"
+            exit 1
+          fi
+          echo "skip-unchanged validation succeeded"
+
+      - name: Delete the skip-test bundle
+        if: always()
+        continue-on-error: true
+        run: |
+          astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          astro deployment bundle delete --deployment-id ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }} --mount-path "$MOUNT_PATH" --force
+
+  # Asserts the action rejects invalid input combinations before it touches Astro. These cases never
+  # reach a deploy, so the job needs no deployment and runs alongside the chain above.
+  input-validation-test:
+    name: Input Validation Test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: non-dags without mount-path
+            deploy_type: non-dags
+            mount_path: ""
+            bundle_type: ""
+            dag_bundle_name: ""
+            dags_path: ""
+            image_name: no-custom-image
+            cli_version: ""
+          - case: dag-bundle-name with image-only
+            deploy_type: image-only
+            mount_path: ""
+            bundle_type: ""
+            dag_bundle_name: e2e-team-a
+            dags_path: ""
+            image_name: no-custom-image
+            cli_version: ""
+          - case: dag-bundle-name with image-name
+            deploy_type: image-and-dags
+            mount_path: ""
+            bundle_type: ""
+            dag_bundle_name: e2e-team-a
+            dags_path: ""
+            image_name: custom-image:latest
+            cli_version: ""
+          - case: bundle-type without non-dags
+            deploy_type: dbt
+            mount_path: ""
+            bundle_type: dbt
+            dag_bundle_name: ""
+            dags_path: ""
+            image_name: no-custom-image
+            cli_version: ""
+          - case: dags-path with non-dags
+            deploy_type: non-dags
+            mount_path: /usr/local/airflow/e2e-invalid
+            bundle_type: ""
+            dag_bundle_name: ""
+            dags_path: teams/a/dags
+            image_name: no-custom-image
+            cli_version: ""
+          - case: unknown deploy-type
+            deploy_type: bundles
+            mount_path: ""
+            bundle_type: ""
+            dag_bundle_name: ""
+            dags_path: ""
+            image_name: no-custom-image
+            cli_version: ""
+          - case: dag-bundle-name below the minimum CLI version
+            deploy_type: dags-only
+            mount_path: ""
+            bundle_type: ""
+            dag_bundle_name: e2e-team-a
+            dags_path: ""
+            image_name: no-custom-image
+            cli_version: 1.43.1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run deploy action with an invalid configuration
+        id: invalid-config
+        continue-on-error: true
+        uses: ./
+        with:
+          deployment-id: e2e-validation-only
+          checkout: false
+          deploy-type: ${{ matrix.deploy_type }}
+          root-folder: e2e-setup/astro-project
+          mount-path: ${{ matrix.mount_path }}
+          bundle-type: ${{ matrix.bundle_type }}
+          dag-bundle-name: ${{ matrix.dag_bundle_name }}
+          dags-path: ${{ matrix.dags_path }}
+          image-name: ${{ matrix.image_name }}
+          cli-version: ${{ matrix.cli_version }}
+
+      - name: Validate the action rejected the configuration
+        shell: bash
+        run: |
+          if [[ "${{ steps.invalid-config.outcome }}" != "failure" ]]; then
+            echo "Validation test failed: the action accepted an invalid configuration (${{ matrix.case }})"
+            exit 1
+          fi
+          echo "Validation test succeeded: the action rejected '${{ matrix.case }}'"
+
   # Remote-execution tests run in parallel to the chain above since they operate on a separate deployment.
   # The deployment is created with dag_deploy_enabled: false and executor: ASTRO, so the action always
   # produces an image deploy regardless of which mock is in place.
@@ -1298,6 +1778,49 @@ jobs:
           echo "DBT Deploy Action validation failed: DBT bundle was not updated"
           exit 1
 
+      - name: Mock git commands for non-DAG bundle deploy
+        run: |
+          mv e2e-setup/mocks/non-dags-deploy-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      - name: Re-patch deploy-action for non-DAG bundle deploy
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Non-DAG Bundle Deploy to Deployment Preview
+        id: deployment-preview-non-dags-deploy
+        uses: ./
+        with:
+          deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          action: deploy-deployment-preview
+          deploy-type: non-dags
+          root-folder: e2e-setup/non-dags
+          mount-path: /usr/local/airflow/e2e-non-dags
+          bundle-type: e2e-non-dags
+          description: "test-non-dags-deploy-action"
+          preview-name: test-preview-${{ matrix.deployment_id }}
+          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 300s
+
+      - name: Get non-DAG bundle on the preview
+        id: get-preview-non-dags-bundle
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          mount_path: /usr/local/airflow/e2e-non-dags
+
+      - name: Validate Non-DAG Bundle Deploy to Preview
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-preview-non-dags-bundle.outputs.found }}" != "true" ]]; then
+            echo "Non-DAG Bundle preview validation failed: no bundle mounted on the preview deployment"
+            exit 1
+          fi
+          echo "Non-DAG Bundle preview validation succeeded: version ${{ steps.get-preview-non-dags-bundle.outputs.desired_version }}"
+
       - name: Re-patch deploy-action for manual dispatch
         if: always()
         uses: ./.github/workflows/e2e/patch_action_for_dispatch
@@ -1335,6 +1858,9 @@ jobs:
         pytests-test,
         custom-docker-image-test,
         dbt-deploy-test,
+        non-dags-deploy-test,
+        named-dag-bundle-test,
+        bundle-skip-test,
         deployment-preview-test,
         remote-deploy-test,
         remote-custom-image-test,

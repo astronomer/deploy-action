@@ -1,6 +1,6 @@
 name: Patch deploy-action for manual dispatch
 description: >
-  On workflow_dispatch the deploy-action's Get Deploy Type and Get DBT Deploy
+  On workflow_dispatch the deploy-action's Get Deploy Type and Get Bundle Deploy
   Options steps early-exit because the github.event.before/after values are
   empty, bypassing the diff-based deploy-type inference that the per-job git
   mocks rely on. This composite patches the on-disk copy of the root

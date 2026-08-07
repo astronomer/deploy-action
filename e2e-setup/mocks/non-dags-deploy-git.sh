@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# hack to mock git commands as part of action.yaml so that we could simulate dbt deploy scenario without making any additional commits
+# hack to mock git commands as part of action.yaml so that we could simulate a non-DAG bundle deploy scenario without making any additional commits
 
 # Check if the script was invoked with "git diff"
 if [[ "$1" == "diff" ]]; then
-  echo "e2e-setup/dbt/dbt_project.yml"
+  echo "e2e-setup/non-dags/queries/example.sql"
 elif [[ "$1" == "fetch" ]]; then
   echo "Handling git fetch, doing nothing"
 elif [[ "$1" == "cat-file" ]]; then
