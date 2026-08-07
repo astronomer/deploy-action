@@ -643,11 +643,11 @@ runs:
           echo "event that triggered the workflow: $GITHUB_REF"
           # history is already present from the fetch-depth: 0 checkout, so no fetch is needed;
           # a `git fetch` here would also fail on private repos due to persist-credentials: false
-          if ! git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
-            echo "Commit ${{ github.event.before }} does not exist, falling back to image deploy."
+          if ! git cat-file -e "$GITHUB_EVENT_BEFORE" 2>/dev/null; then
+            echo "Commit $GITHUB_EVENT_BEFORE does not exist, falling back to image deploy."
           else
             SKIP_IMAGE_OR_DAGS_DEPLOY=true
-            files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+            files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
             echo "files changed: $files"
           fi
         fi

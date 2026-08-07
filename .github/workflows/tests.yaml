@@ -11,9 +11,14 @@ on:
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
-  # Consumed by .github/workflows/e2e/patch_action_for_dispatch on workflow_dispatch.
-  DEPLOY_ACTION_DIFF_BEFORE: ${{ github.event.before || 'e2e-fake-before' }}
-  DEPLOY_ACTION_DIFF_AFTER: ${{ github.event.after || 'e2e-fake-after' }}
+  # The diff base the action reads, normalized by .github/workflows/e2e/patch_action_for_dispatch.
+  # A real push carries usable SHAs; workflow_dispatch carries none, and a push that creates the
+  # branch reports an all-zero before. The action treats both of those as "cannot diff, deploy
+  # everything", which is right in production but defeats every test that asserts a narrower deploy
+  # or a skip — so they are replaced with sentinels that get past that guard and let the git mocks
+  # decide. The sentinels need not be valid SHAs: git is mocked wherever the decision matters.
+  DEPLOY_ACTION_DIFF_BEFORE: ${{ (github.event.before && github.event.before != '0000000000000000000000000000000000000000') && github.event.before || 'e2e-fake-before' }}
+  DEPLOY_ACTION_DIFF_AFTER: ${{ (github.event.after && github.event.after != '0000000000000000000000000000000000000000') && github.event.after || 'e2e-fake-after' }}
 
 jobs:
   redact-inputs:
@@ -1199,6 +1204,10 @@ jobs:
           fi
           echo "Bundle skip validation succeeded: no bundle deployed"
 
+      # the deploy-action checks the repo out again, restoring the unpatched action.yaml
+      - name: Re-patch deploy-action before the next invocation
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
       # same unchanged tree, but a matching bundle-trigger-path must force the deploy
       - name: Deploy via bundle-trigger-paths
         uses: ./
@@ -1231,6 +1240,9 @@ jobs:
             exit 1
           fi
           echo "bundle-trigger-paths validation succeeded: version ${{ steps.get-bundle-triggered.outputs.desired_version }}"
+
+      - name: Re-patch deploy-action before the final invocation
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
 
       # same unchanged tree again, this time skip-unchanged=false must force a fresh deploy
       - name: Deploy with skip-unchanged disabled

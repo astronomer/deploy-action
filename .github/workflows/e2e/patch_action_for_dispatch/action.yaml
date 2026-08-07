@@ -1,22 +1,31 @@
-name: Patch deploy-action for manual dispatch
+name: Normalize the deploy-action diff base
 description: >
-  On workflow_dispatch the deploy-action's Get Deploy Type and Get Bundle Deploy
-  Options steps early-exit because the github.event.before/after values are
-  empty, bypassing the diff-based deploy-type inference that the per-job git
-  mocks rely on. This composite patches the on-disk copy of the root
-  action.yaml to read the DEPLOY_ACTION_DIFF_BEFORE / DEPLOY_ACTION_DIFF_AFTER
-  env vars (set at the workflow level in tests.yaml) instead, so the existing
-  mocks drive the deploy-type decision the same way they do on push. The
-  action.yaml committed to git is unchanged.
+  Point the deploy-action's diff at the DEPLOY_ACTION_DIFF_BEFORE /
+  DEPLOY_ACTION_DIFF_AFTER env vars (set at the workflow level in tests.yaml)
+  instead of github.event.before/after, so every run shape reaches the same
+  decision path and the per-job git mocks drive the deploy-type inference.
+
+  Without this, two run shapes bypass the diff entirely and make the action
+  deploy everything: workflow_dispatch, which carries no before/after at all,
+  and the push that creates a branch, which reports an all-zero before. Both
+  then fail any job asserting a DAG-only deploy, an image-only deploy, or a
+  skip. On an ordinary push the env vars hold the real SHAs, so this rewrite
+  is a no-op in behavior — which is why it runs unconditionally rather than
+  only on dispatch.
+
+  Re-apply this after every deploy-action invocation: the action checks the
+  repository out again, restoring the unpatched file. The rewrite is
+  idempotent. The action.yaml committed to git is unchanged.
 
 runs:
   using: composite
   steps:
     - name: Rewrite GITHUB_EVENT_BEFORE/AFTER assignments in action.yaml
-      if: github.event_name == 'workflow_dispatch'
       shell: bash
       run: |
         sed -i -E \
           -e 's|^([[:space:]]*)GITHUB_EVENT_BEFORE=.*$|\1GITHUB_EVENT_BEFORE=${DEPLOY_ACTION_DIFF_BEFORE:-}|' \
           -e 's|^([[:space:]]*)GITHUB_EVENT_AFTER=.*$|\1GITHUB_EVENT_AFTER=${DEPLOY_ACTION_DIFF_AFTER:-}|' \
           action.yaml
+
+        echo "Diff base for this run: ${DEPLOY_ACTION_DIFF_BEFORE:-} -> ${DEPLOY_ACTION_DIFF_AFTER:-}"
