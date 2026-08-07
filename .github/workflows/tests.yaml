@@ -616,7 +616,9 @@ jobs:
             "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
             "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
           ]
-        deploy_type: [infer, dbt, dags, image-and-dags, image-only]
+        # unlike the other deploy_type matrices, these values are passed straight to the
+        # action's deploy-type input, so they must be real deploy types
+        deploy_type: [infer, dbt, dags-only, image-and-dags, image-only]
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
