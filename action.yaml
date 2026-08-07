@@ -209,9 +209,11 @@ runs:
         fi
 
         # The installer script is pinned to an astro-cli commit instead of main, so
-        # a run cannot execute unreviewed code. The pinned commit also sets the CLI
-        # version installed when cli-version is empty; bump the pin to move it.
-        GODOWNLOADER_URL="https://raw.githubusercontent.com/astronomer/astro-cli/0dfc4bff5cbbf014ce092abf3a421ca41781cabe/godownloader.sh"  # astro-cli v1.44.0
+        # a run cannot execute unreviewed code. A commit and not a tag: tags can be moved,
+        # and astro-cli cuts a release tag before the commit that bumps LATEST_VERSION here.
+        # The pinned commit also sets the CLI version installed when cli-version is empty;
+        # bump the pin to move it.
+        GODOWNLOADER_URL="https://raw.githubusercontent.com/astronomer/astro-cli/0dfc4bff5cbbf014ce092abf3a421ca41781cabe/godownloader.sh"  # LATEST_VERSION=v1.44.0
 
         if [[ $CLI_VERSION == "" ]]; then
           curl -sSL "$GODOWNLOADER_URL" | bash -s -- -b "$HOME/.local/bin"
