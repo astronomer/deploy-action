@@ -159,9 +159,10 @@ runs:
           CLI_VERSION=$(astro version | awk '{print $4}')
         fi
 
-        # Ensure semver CLI is available for version comparisons
+        # Ensure semver CLI is available for version comparisons. The version is
+        # pinned and install scripts are off, so a run cannot pull unreviewed code.
         if ! command -v semver &> /dev/null; then
-          npm install -g semver
+          npm install -g --ignore-scripts semver@7.8.5
         fi
 
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
@@ -207,10 +208,15 @@ runs:
           CLI_VERSION=v$CLI_VERSION
         fi
 
+        # The installer script is pinned to an astro-cli commit instead of main, so
+        # a run cannot execute unreviewed code. The pinned commit also sets the CLI
+        # version installed when cli-version is empty; bump the pin to move it.
+        GODOWNLOADER_URL="https://raw.githubusercontent.com/astronomer/astro-cli/0dfc4bff5cbbf014ce092abf3a421ca41781cabe/godownloader.sh"  # astro-cli v1.44.0
+
         if [[ $CLI_VERSION == "" ]]; then
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin"
+          curl -sSL "$GODOWNLOADER_URL" | bash -s -- -b "$HOME/.local/bin"
         else
-          curl -sSL https://raw.githubusercontent.com/astronomer/astro-cli/main/godownloader.sh | bash -s -- -b "$HOME/.local/bin" "$CLI_VERSION"
+          curl -sSL "$GODOWNLOADER_URL" | bash -s -- -b "$HOME/.local/bin" "$CLI_VERSION"
         fi
         echo ::endgroup::
       shell: bash
