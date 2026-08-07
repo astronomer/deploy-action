@@ -1277,7 +1277,7 @@ jobs:
         id: get-bundle-forced
         uses: ./.github/workflows/e2e/get_deployment_bundle
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment_id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1301,7 +1301,7 @@ jobs:
         continue-on-error: true
         run: |
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
-          astro deployment bundle delete --deployment-id ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }} --mount-path "$MOUNT_PATH" --force
+          astro deployment bundle delete --deployment-id ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }} --mount-path "$MOUNT_PATH" --force
 
   # Asserts the action rejects invalid input combinations before it touches Astro. These cases never
   # reach a deploy, so the job needs no deployment and runs alongside the chain above.
