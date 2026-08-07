@@ -207,6 +207,7 @@ jobs:
           deployment-id: ${{ matrix.deployment_id }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -296,6 +297,7 @@ jobs:
           parse: true
           root-folder: e2e-setup/astro-project
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -388,6 +390,7 @@ jobs:
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -484,6 +487,7 @@ jobs:
           action: deploy
           root-folder: e2e-setup/astro-project
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -573,6 +577,7 @@ jobs:
           deploy-type: image-only
           root-folder: e2e-setup/astro-project
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -667,6 +672,7 @@ jobs:
           deploy-type: ${{ matrix.deploy_type }}
           root-folder: ${{ matrix.deploy_type == 'dbt' && 'e2e-setup/dbt' || 'e2e-setup/astro-project' }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -781,6 +787,7 @@ jobs:
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -868,6 +875,7 @@ jobs:
           deploy-type: dbt
           description: "test-dbt-deploy-action"
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wait-time: 15m
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
@@ -963,7 +971,7 @@ jobs:
           bundle-type: e2e-non-dags
           description: "test-non-dags-deploy-action"
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get non-DAG bundle info
         id: get-non-dags-bundle-info
@@ -1085,7 +1093,7 @@ jobs:
           dag-bundle-name: e2e-team-a
           no-dags-base-dir: true
           description: "test-named-dag-bundle-deploy-action"
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get named DAG bundle after test
         id: get-bundle-after
@@ -1220,7 +1228,7 @@ jobs:
           bundle-type: e2e-skip
           bundle-trigger-paths: README.md
           description: "test-bundle-trigger-paths-action"
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get bundle after trigger-path deploy
         id: get-bundle-triggered
@@ -1256,7 +1264,7 @@ jobs:
           bundle-type: e2e-skip
           skip-unchanged: false
           description: "test-bundle-skip-unchanged-action"
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get bundle after skip-unchanged deploy
         id: get-bundle-forced
@@ -1446,6 +1454,7 @@ jobs:
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -1526,6 +1535,7 @@ jobs:
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
@@ -1613,7 +1623,7 @@ jobs:
           copy-airflow-variables: false
           copy-pools: false
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-create-preview
@@ -1664,7 +1674,7 @@ jobs:
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-deploy-preview
@@ -1716,7 +1726,7 @@ jobs:
           root-folder: e2e-setup/astro-project
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get Deployment Info After DAG Deploy Test
         id: get-deployment-after-dag-deploy
@@ -1760,7 +1770,7 @@ jobs:
           root-folder: e2e-setup/dbt
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
@@ -1812,7 +1822,7 @@ jobs:
           description: "test-non-dags-deploy-action"
           preview-name: test-preview-${{ matrix.deployment_id }}
           wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wait-time: 15m
 
       - name: Get non-DAG bundle on the preview
         id: get-preview-non-dags-bundle
