@@ -52,11 +52,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        deployment: [deployment-hibernate.yaml, deployment.yaml, deployment-remote.yaml]
+        deployment: [deployment-hibernate.yaml, deployment.yaml, deployment-remote.yaml, deployment-bundle.yaml]
     outputs:
       DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
       HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
       REMOTE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.REMOTE_DEPLOYMENT_ID }}
+      BUNDLE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.BUNDLE_DEPLOYMENT_ID }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -125,6 +126,9 @@ jobs:
               ;;
             deployment-remote.yaml)
               echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+              ;;
+            deployment-bundle.yaml)
+              echo "BUNDLE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
               ;;
           esac
   default-deploy-tests:
@@ -907,15 +911,12 @@ jobs:
 
   non-dags-deploy-test:
     name: Non-DAG Bundle Deploy Test
+    # The bundle jobs run against their own deployment, off the image/DAG chain: they share no
+    # state with it, and hanging off it meant an unrelated flake upstream skipped them entirely.
+    # They stay serialized among themselves because they do share this one deployment.
+    # wake-on-deploy against a bundle deploy is still covered, by dbt-deploy-test.
     runs-on: ubuntu-latest
-    needs: [dbt-deploy-test, create-test-deployments]
-    strategy:
-      matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+    needs: [create-test-deployments]
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -963,21 +964,20 @@ jobs:
       - name: Non-DAG Bundle Deploy to Astro
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           root-folder: e2e-setup/non-dags
           deploy-type: non-dags
           mount-path: /usr/local/airflow/e2e-non-dags
           bundle-type: e2e-non-dags
           description: "test-non-dags-deploy-action"
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
           wait-time: 15m
 
       - name: Get non-DAG bundle info
         id: get-non-dags-bundle-info
         uses: ./.github/workflows/e2e/get_bundle_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -987,7 +987,7 @@ jobs:
         id: get-non-dags-bundle
         uses: ./.github/workflows/e2e/get_deployment_bundle
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1063,13 +1063,13 @@ jobs:
       - name: Create the named DAG bundle
         run: |
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
-          astro deployment bundle create --deployment-id ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }} --name "$DAG_BUNDLE_NAME"
+          astro deployment bundle create --deployment-id ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }} --name "$DAG_BUNDLE_NAME"
 
       - name: Get named DAG bundle before test
         id: get-bundle-before
         uses: ./.github/workflows/e2e/get_deployment_bundle
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment_id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1085,7 +1085,7 @@ jobs:
       - name: Deploy DAGs to the named bundle
         uses: ./
         with:
-          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment-id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           deploy-type: dags-only
           root-folder: e2e-setup/astro-project
@@ -1099,7 +1099,7 @@ jobs:
         id: get-bundle-after
         uses: ./.github/workflows/e2e/get_deployment_bundle
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment_id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1133,7 +1133,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          astro deployment bundle delete --deployment-id ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }} --name "$DAG_BUNDLE_NAME" --force
+          astro deployment bundle delete --deployment-id ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }} --name "$DAG_BUNDLE_NAME" --force
 
   # Asserts the skip side of the bundle deploy decision: no change under root-folder means no deploy,
   # unless skip-unchanged is off or a bundle-trigger-path matched. The git mock reports README.md.
@@ -1185,7 +1185,7 @@ jobs:
       - name: Deploy with no relevant changes
         uses: ./
         with:
-          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment-id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           root-folder: e2e-setup/non-dags
           deploy-type: non-dags
@@ -1197,7 +1197,7 @@ jobs:
         id: get-bundle-skipped
         uses: ./.github/workflows/e2e/get_deployment_bundle
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment_id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1220,7 +1220,7 @@ jobs:
       - name: Deploy via bundle-trigger-paths
         uses: ./
         with:
-          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment-id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           root-folder: e2e-setup/non-dags
           deploy-type: non-dags
@@ -1234,7 +1234,7 @@ jobs:
         id: get-bundle-triggered
         uses: ./.github/workflows/e2e/get_deployment_bundle
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment_id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1256,7 +1256,7 @@ jobs:
       - name: Deploy with skip-unchanged disabled
         uses: ./
         with:
-          deployment-id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment-id: ${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           root-folder: e2e-setup/non-dags
           deploy-type: non-dags
@@ -1928,7 +1928,8 @@ jobs:
           for id in \
             "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}" \
             "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}" \
-            "${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}"; do
+            "${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}" \
+            "${{ needs.create-test-deployments.outputs.BUNDLE_DEPLOYMENT_ID }}"; do
             if [[ -n "$id" ]]; then
               astro deployment delete -f "$id"
             fi
