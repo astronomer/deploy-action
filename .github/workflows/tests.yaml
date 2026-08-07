@@ -1023,7 +1023,10 @@ jobs:
   named-dag-bundle-test:
     name: Named DAG Bundle Deploy Test
     runs-on: ubuntu-latest
+    # depends on the previous bundle job only to serialize access to the shared deployment,
+    # not on its result — a failure there should not silently drop this job's coverage
     needs: [non-dags-deploy-test, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     env:
       DAG_BUNDLE_NAME: e2e-team-a
     steps:
@@ -1140,7 +1143,9 @@ jobs:
   bundle-skip-test:
     name: Bundle Deploy Skip Test
     runs-on: ubuntu-latest
+    # serialization dependency only, same as above
     needs: [named-dag-bundle-test, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     env:
       MOUNT_PATH: /usr/local/airflow/e2e-skip
     steps:
