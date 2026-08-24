@@ -71,7 +71,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `sparse-checkout` | `` | Comma- or newline-separated list of cone-mode sparse-checkout patterns passed to `actions/checkout`. When set, only the listed paths (plus repo-root files) are checked out, which can dramatically reduce checkout size for large monorepos. Typically set to the same value as `root-folder`. Works only when `checkout` is set to `true`. Leave empty for a full checkout (default). |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
-| `cli-version` | `` | The desired Astro CLI version to use. The latest version is used if left unset. |
+| `cli-version` | `1.45.0` | The desired Astro CLI version to use. The default is pinned, so a given ref of this action always installs the same CLI version. Bump it to move. Ignored when the Astro CLI is already installed. |
 | `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
 
 
