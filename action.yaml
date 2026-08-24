@@ -59,8 +59,8 @@ inputs:
     description: "Copy pools from the original Deployment to the new deployment preview."
   cli-version:
     required: false
-    default: ""
-    description: "The desired Astro CLI version to use"
+    default: "1.45.0"
+    description: "The desired Astro CLI version to use. Pinned so a given ref of this action always installs the same CLI."
   checkout:
     required: false
     default: true
@@ -168,7 +168,7 @@ runs:
         # Check if the Astro CLI version is less than 1.28.1 for dbt-deploy
         if [[ "${{ inputs.deploy-type }}" == "dbt" && $CLI_VERSION != "" ]]; then
           REQUIRED_VERSION="1.28.1"
-          CURRENT_VERSION=$(astro version | awk '{print $4}')
+          CURRENT_VERSION="${CLI_VERSION}"
           if ! semver -r ">${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
             echo "DBT Deploy requires Astro CLI version $REQUIRED_VERSION or higher"
             exit 1
@@ -178,7 +178,7 @@ runs:
         # Check if the Astro CLI version is less than 1.21.0 for image-only deploy
         if [[ "${{ inputs.deploy-type }}" == "image-only" && $CLI_VERSION != "" ]]; then
           REQUIRED_VERSION="1.21.0"
-          CURRENT_VERSION=$(astro version | awk '{print $4}')
+          CURRENT_VERSION="${CLI_VERSION}"
           if ! semver -r ">=${REQUIRED_VERSION}" "${CURRENT_VERSION}"; then
             echo "Image-only deploy requires Astro CLI version $REQUIRED_VERSION or higher"
             exit 1
@@ -211,9 +211,8 @@ runs:
         # The installer script is pinned to an astro-cli commit instead of main, so
         # a run cannot execute unreviewed code. A commit and not a tag: tags can be moved,
         # and astro-cli cuts a release tag before the commit that bumps LATEST_VERSION here.
-        # The pinned commit also sets the CLI version installed when cli-version is empty;
-        # bump the pin to move it.
-        GODOWNLOADER_URL="https://raw.githubusercontent.com/astronomer/astro-cli/0dfc4bff5cbbf014ce092abf3a421ca41781cabe/godownloader.sh"  # LATEST_VERSION=v1.44.0
+        # The version installed comes from the cli-version input, not from this script.
+        GODOWNLOADER_URL="https://raw.githubusercontent.com/astronomer/astro-cli/0dfc4bff5cbbf014ce092abf3a421ca41781cabe/godownloader.sh"
 
         if [[ $CLI_VERSION == "" ]]; then
           curl -sSL "$GODOWNLOADER_URL" | bash -s -- -b "$HOME/.local/bin"
