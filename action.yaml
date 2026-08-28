@@ -102,7 +102,10 @@ inputs:
       `image-and-dags`, and `image-only` deploy types.
   build-secrets:
     required: false
-    description: "Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'"
+    description: >
+      Newline-delimited list of Docker build secrets, one `docker build --secret` specification per line, e.g.
+      'id=mysecret,src=secrets.txt'. Each line is passed to `astro deploy` as its own `--build-secret` flag.
+      See https://docs.docker.com/build/building/secrets/ for more information.
   mount-path:
     required: false
     default: ""
@@ -601,14 +604,46 @@ runs:
           options="$options --description '${{ inputs.description }}'"
         fi
 
-        # Add build-secrets option
-        if [[ "${{ inputs.build-secrets }}" != '' ]]; then
-          options="$options --build-secrets '${{ inputs.build-secrets }}'"
+        # add build secret option(s)
+        if [[ -n "$BUILD_SECRETS" ]]; then
+          secrets=()
+          while IFS= read -r secret; do
+            if [[ -n "$secret" ]]; then
+              secrets+=("$secret")
+            fi
+          done <<< "$BUILD_SECRETS"
+
+          CLI_VERSION=""
+          if command -v astro &> /dev/null; then
+            CLI_VERSION=$(astro version | awk '{print $4}')
+          fi
+
+          # `--build-secrets` was added in v1.44.0.
+          #
+          # If we're running a version earlier than that, use `--build-secrets`,
+          # and only support a single entry.
+          BUILD_SECRET_MULTI=true
+          if [[ -n "$CLI_VERSION" ]] && command -v semver >/dev/null 2>&1 && ! semver -r ">=1.44.0" "$CLI_VERSION" >/dev/null 2>&1; then
+            BUILD_SECRET_MULTI=false
+          fi
+
+          if [[ ${#secrets[@]} -gt 0 && $BUILD_SECRET_MULTI == false ]]; then
+            if [[ ${#secrets[@]} -gt 1 ]]; then
+              echo "::warning::This version of the Astro CLI accepts only a single build secret: only the first line in 'build-secrets' will be used. Set cli-version to 1.44.0 or later to use multiple build secrets."
+            fi
+            options="$options --build-secrets '${secrets[0]}'"
+          else
+            for secret in "${secrets[@]}"; do
+              options="$options --build-secret '$secret'"
+            done
+          fi
         fi
 
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
         echo ::endgroup::
       shell: bash
+      env:
+        BUILD_SECRETS: ${{ inputs.build-secrets }}
       id: deploy-options
     - name: Determine if Development Mode is enabled
       if: ${{ inputs.wake-on-deploy == 'true' && inputs.action != 'delete-deployment-preview' }}

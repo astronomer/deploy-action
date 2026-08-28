@@ -66,7 +66,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `preview-name` | `false` | Specifies custom preview name. By default this is branch name “_” deployment name. |
 | `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action. Your custom checkout step needs to have `fetch-depth` of `0` and `ref` equal to `${{ github.event.after }}` so all the commits in the PR are checked out. Look at the checkout step that runs within this action for reference. |
 | `deploy-image` | `false` | If true image and DAGs will deploy for any action that deploys code. NOTE: This option is deprecated and will be removed in a future release. Use `deploy-type: image-and-dags` instead. |
-| `build-secrets` | `` | Mimics docker build --secret flag. See https://docs.docker.com/build/building/secrets/ for more information. Example input 'id=mysecret,src=secrets.txt'. |
+| `build-secrets` | `` | Newline-delimited list of Docker build secrets, one `docker build --secret` specification per line (e.g. `id=mysecret,src=secrets.txt`). Each line is passed to `astro deploy` as its own `--build-secret` flag. See https://docs.docker.com/build/building/secrets/ for more information. |
 | `mount-path` | `` | Path to mount dbt project in Airflow, for reference by DAGs. Default /usr/local/airflow/dbt/{dbt project name} |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `sparse-checkout` | `` | Comma- or newline-separated list of cone-mode sparse-checkout patterns passed to `actions/checkout`. When set, only the listed paths (plus repo-root files) are checked out, which can dramatically reduce checkout size for large monorepos. Typically set to the same value as `root-folder`. Works only when `checkout` is set to `true`. Leave empty for a full checkout (default). |
@@ -280,6 +280,32 @@ steps:
   with:
     deployment-id: <deployment id>
     force: true
+```
+
+### Use Docker build secrets
+
+In the following example, two [Docker build secrets](https://docs.docker.com/build/building/secrets/) are exposed to the image build: one sourced from a file on the runner and one from an environment variable. The `build-secrets` input takes one secret specification per line.
+
+```yaml
+steps:
+- name: Deploy to Astro
+  uses: astronomer/deploy-action@v0.15.0
+  env:
+    PLATFORM_PASSWORD: ${{ secrets.PLATFORM_PASSWORD }}
+  with:
+    deployment-id: <deployment id>
+    build-secrets: |
+      id=aws,src=/home/runner/.aws/credentials
+      id=PLATFORM_PASSWORD,env=PLATFORM_PASSWORD
+```
+
+Your Astro project's Dockerfile can then mount the secrets during the build without baking them into the image:
+
+```dockerfile
+RUN --mount=type=secret,id=aws \
+    --mount=type=secret,id=PLATFORM_PASSWORD,env=PLATFORM_PASSWORD \
+    AWS_SHARED_CREDENTIALS_FILE=/run/secrets/aws \
+    ./install-private-dependencies.sh
 ```
 
 ### Deploy a custom Docker image
