@@ -8,7 +8,7 @@ inputs:
   root-folder:
     required: false
     default: ""
-    description: "Path to the Astro project, or dbt project for dbt deploys."
+    description: "Path to the Astro project, or to the bundle directory for `dbt` and `non-dags` deploys. Required with `deploy-type: non-dags`."
   parse:
     required: false
     default: false
@@ -82,7 +82,7 @@ inputs:
   deploy-type:
     required: false
     default: "infer"
-    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image or DBT project. Specify either 'infer', 'dags-only', 'image-and-dags', 'image-only', or 'dbt'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files. 'image-only' deploys the image without updating DAGs."
+    description: "Specify the type of deploy you would like to do. Use this option to deploy only DAGs or the image, a DBT project, or a non-DAG bundle. Specify either 'infer', 'dags-only', 'image-and-dags', 'image-only', 'dbt', or 'non-dags'. 'infer' option would infer between DAG only deploy and image and DAG deploy based on updated files. 'image-only' deploys the image without updating DAGs. 'non-dags' deploys the 'root-folder' directory as a non-DAG bundle mounted at 'mount-path', and requires Astro CLI 1.44.0 or higher."
   image-trigger-paths:
     required: false
     default: ""
@@ -91,15 +91,15 @@ inputs:
       Useful in monorepos where files built or copied into the image at deploy time (e.g. generated protos) live outside
       the Astro project. A change under any of these paths forces an image deploy instead of being skipped. Paths are
       matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory
-      (e.g. `proto/`). Only applies to the `infer`, `image-and-dags`, and `image-only` deploy types.
+      (e.g. `proto/`). Only applies to the `infer`, `image-and-dags`, and `image-only` deploy types. For `dbt` and
+      `non-dags` deploys, use `bundle-trigger-paths` instead.
   skip-unchanged:
     required: false
     default: true
     description: >
-      When true (default), the action skips the deploy if no changed files fall under `root-folder` (or `image-trigger-paths`).
-      Set to false to disable this diff-based skip and always run the deploy dictated by `deploy-type` on every run. This is
-      the closest replacement for the deprecated `deploy-image: true` behavior. Only applies to the `infer`, `dags-only`,
-      `image-and-dags`, and `image-only` deploy types.
+      When true (default), the action skips the deploy if no changed files fall under `root-folder` (or
+      `image-trigger-paths` / `bundle-trigger-paths`). Set to false to disable this diff-based skip and always run the deploy dictated by
+      `deploy-type` on every run. This is the closest replacement for the deprecated `deploy-image: true` behavior.
   build-secrets:
     required: false
     description: >
@@ -109,7 +109,22 @@ inputs:
   mount-path:
     required: false
     default: ""
-    description: "Path to mount dbt project in Airflow, for reference by DAGs. Default /usr/local/airflow/dbt/{dbt project name}"
+    description: >
+      Path to mount the bundle in Airflow, for reference by DAGs. Required with `deploy-type: non-dags`. With
+      `deploy-type: dbt` it is optional and defaults to /usr/local/airflow/dbt/{dbt project name}.
+  non-dags-bundle-type:
+    required: false
+    default: ""
+    description: >
+      Free-form label identifying the kind of non-DAG bundle being deployed (e.g. `dbt`), shown in the Deploy History
+      tab. Only applies to the `non-dags` deploy type. Requires Astro CLI 1.44.0 or higher.
+  bundle-trigger-paths:
+    required: false
+    default: ""
+    description: >
+      Comma- or newline-separated list of paths outside `root-folder` that should also trigger a bundle deploy when changed. Useful in monorepos where a bundle depends on shared files that live outside its own directory. Paths are
+      matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory
+      (e.g. `shared/macros/`). Only applies to the `dbt` and `non-dags` deploy types.
   checkout-submodules:
     required: false
     default: false
@@ -197,6 +212,15 @@ runs:
           fi
         fi
 
+        # Check if the Astro CLI version is less than 1.44.0 for non-DAG bundle deploys
+        if [[ "${{ inputs.deploy-type }}" == "non-dags" && $CLI_VERSION != "" ]]; then
+          REQUIRED_VERSION="1.44.0"
+          if ! semver -r ">=${REQUIRED_VERSION}" "${CLI_VERSION}"; then
+            echo "Non-DAG bundle deploys require Astro CLI version $REQUIRED_VERSION or higher"
+            exit 1
+          fi
+        fi
+
         # skip Astro CLI installation if already installed
         if command -v astro &> /dev/null; then
           echo "Astro CLI is already installed"
@@ -235,6 +259,15 @@ runs:
           exit 1 # terminate and indicate error
         fi
 
+        # validate deploy-type input
+        case "${{ inputs.deploy-type }}" in
+          infer|dags-only|image-and-dags|image-only|dbt|non-dags) ;;
+          *)
+            echo "ERROR: you specified an improper deploy-type input. Deploy type must be infer, dags-only, image-and-dags, image-only, dbt, or non-dags."
+            exit 1 # terminate and indicate error
+            ;;
+        esac
+
         # validate deploy-type-specific inputs
         # a custom image is deployed as it was built, so there is nothing to test or build, and dags-only never
         # deploys an image; the CLI rejects the equivalent flags alongside --image-name
@@ -248,21 +281,48 @@ runs:
             echo "ERROR: parse and pytest cannot be used with image-name"
             exit 1 # terminate and indicate error
           fi
-          if [[ -n "$BUILD_SECRETS" && "${{ inputs.deploy-type }}" != "dbt" ]]; then
+          if [[ -n "$BUILD_SECRETS" && "${{ inputs.deploy-type }}" != "dbt" && "${{ inputs.deploy-type }}" != "non-dags" ]]; then
             echo "ERROR: build-secrets cannot be used with image-name"
             exit 1 # terminate and indicate error
           fi
         fi
-        # image-trigger-paths only affects image deploys, so it's a no-op for dags-only and dbt
-        if [[ -n "${{ inputs.image-trigger-paths }}" && ( "${{ inputs.deploy-type }}" == "dags-only" || "${{ inputs.deploy-type }}" == "dbt" ) ]]; then
+        # image-trigger-paths only affects image deploys, so it's a no-op for the DAG and bundle deploy types
+        if [[ -n "${{ inputs.image-trigger-paths }}" && ( "${{ inputs.deploy-type }}" == "dags-only" || "${{ inputs.deploy-type }}" == "dbt" || "${{ inputs.deploy-type }}" == "non-dags" ) ]]; then
           echo "ERROR: image-trigger-paths is only supported with deploy-type infer, image-and-dags, or image-only"
           exit 1 # terminate and indicate error
         fi
-        # skip-unchanged gates the image/dags diff skip, which the dbt deploy path doesn't use
-        if [[ "${{ inputs.skip-unchanged }}" == "false" && "${{ inputs.deploy-type }}" == "dbt" ]]; then
-          echo "ERROR: skip-unchanged is only supported with deploy-type infer, dags-only, image-and-dags, or image-only"
+        # bundle-trigger-paths is the bundle-deploy equivalent of image-trigger-paths
+        if [[ -n "$BUNDLE_TRIGGER_PATHS" && "${{ inputs.deploy-type }}" != "dbt" && "${{ inputs.deploy-type }}" != "non-dags" ]]; then
+          echo "ERROR: bundle-trigger-paths is only supported with deploy-type dbt or non-dags"
           exit 1 # terminate and indicate error
         fi
+
+        # non-DAG bundles are mounted at a path, which the CLI cannot infer
+        if [[ "${{ inputs.deploy-type }}" == "non-dags" && -z "$MOUNT_PATH" ]]; then
+          echo "ERROR: mount-path is required with deploy-type non-dags"
+          exit 1 # terminate and indicate error
+        fi
+        # mount-path and non-dags-bundle-type only mean anything for a bundle deploy; a stray mount-path is
+        # tolerated so workflows passing it to every invocation keep working
+        if [[ -n "$MOUNT_PATH" && "${{ inputs.deploy-type }}" != "dbt" && "${{ inputs.deploy-type }}" != "non-dags" ]]; then
+          echo "::warning::mount-path is ignored unless deploy-type is dbt or non-dags"
+        fi
+        if [[ -n "$NON_DAGS_BUNDLE_TYPE" && "${{ inputs.deploy-type }}" != "non-dags" ]]; then
+          echo "ERROR: non-dags-bundle-type is only supported with deploy-type non-dags"
+          exit 1 # terminate and indicate error
+        fi
+        # a non-DAG bundle deploy builds and tests nothing; the CLI rejects the equivalent flags alongside --non-dags
+        if [[ "${{ inputs.deploy-type }}" == "non-dags" && ( "${{ inputs.image-name }}" != "no-custom-image" || "${{ inputs.parse }}" == "true" || "${{ inputs.pytest }}" == "true" || -n "$BUILD_SECRETS" ) ]]; then
+          echo "ERROR: image-name, parse, pytest, and build-secrets are not supported with deploy-type non-dags"
+          exit 1 # terminate and indicate error
+        fi
+
+        # a non-DAG bundle is deployed from root-folder; left empty, the whole repository would be deployed as the bundle
+        if [[ "${{ inputs.deploy-type }}" == "non-dags" && -z "$ROOT_FOLDER" ]]; then
+          echo "ERROR: root-folder is required with deploy-type non-dags"
+          exit 1 # terminate and indicate error
+        fi
+
 
         # Select workspace if specified
         if [[ "${{ inputs.workspace }}" != "" ]]; then
@@ -400,6 +460,10 @@ runs:
       id: deployment-preview
       env:
         BUILD_SECRETS: ${{ inputs.build-secrets }}
+        ROOT_FOLDER: ${{ inputs.root-folder }}
+        BUNDLE_TRIGGER_PATHS: ${{ inputs.bundle-trigger-paths }}
+        MOUNT_PATH: ${{ inputs.mount-path }}
+        NON_DAGS_BUNDLE_TYPE: ${{ inputs.non-dags-bundle-type }}
     - name: Determine if DAG Deploy is enabled
       run: |
 
@@ -413,43 +477,80 @@ runs:
         echo ::endgroup::
       shell: bash
       id: dag-deploy-enabled
-    - name: Get DBT Deploy Options
-      if: ${{ inputs.deploy-type == 'dbt' }}
+    - name: Get Bundle Deploy Options
+      if: ${{ inputs.deploy-type == 'dbt' || inputs.deploy-type == 'non-dags' }}
       run: |
 
-        echo ::group::Get DBT Deploy Options
-
-        if [[ "${{ inputs.root-folder }}" != "" ]]; then
-          cd ${{ inputs.root-folder }}
-        fi
+        echo ::group::Get Bundle Deploy Options
 
         # the diff below relies on history already present from the fetch-depth: 0 checkout;
         # don't add a `git fetch` here, it fails on private repos due to persist-credentials: false
-        DBT_DEPLOY=false
+        BUNDLE_DEPLOY=false
+        files=()
 
-        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the dbt project because we cannot determine that it does not need to be deployed
+        # collect bundle-trigger-paths (comma- or newline-separated), trimmed and non-empty
+        BUNDLE_TRIGGERS=()
+        while IFS= read -r trigger; do
+          trigger="${trigger#"${trigger%%[![:space:]]*}"}"
+          trigger="${trigger%"${trigger##*[![:space:]]}"}"
+          [[ -n "$trigger" ]] && BUNDLE_TRIGGERS+=("$trigger")
+        done <<< "${BUNDLE_TRIGGER_PATHS//,/$'\n'}"
+
+        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the bundle because we cannot determine that it does not need to be deployed
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" || -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
-          DBT_DEPLOY=true
-          files=()
+          echo "Manual workflow dispatch or a new branch or tag creation, hence missing github event before and/or after commit hash"
+          BUNDLE_DEPLOY=true
+        elif ! git cat-file -e "$GITHUB_EVENT_BEFORE" 2>/dev/null; then
+          echo "Commit $GITHUB_EVENT_BEFORE does not exist, falling back to a bundle deploy."
+          BUNDLE_DEPLOY=true
         else
           files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
           echo "files changed: $files"
         fi
 
         for file in $files; do
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
-            echo $file is part of configured root folder, so would be triggering a dbt deploy
-            DBT_DEPLOY=true
+          if [[ $file =~ ^"$ROOT_FOLDER".* ]]; then
+            echo $file is part of configured root folder, so would be triggering a bundle deploy
+            BUNDLE_DEPLOY=true
           fi
+
+          # changes under any configured bundle-trigger-path also trigger a deploy, even when the
+          # file lives outside the bundle directory (e.g. shared macros the bundle depends on)
+          for trigger in "${BUNDLE_TRIGGERS[@]}"; do
+            if [[ $file == "$trigger"* ]]; then
+              echo "$file matches bundle-trigger-path '$trigger', triggering a bundle deploy"
+              BUNDLE_DEPLOY=true
+            fi
+          done
         done
 
+        # skip-unchanged=false disables the diff-based skip entirely and always deploys the bundle
+        if [[ "${{ inputs.skip-unchanged }}" == "false" ]]; then
+          BUNDLE_DEPLOY=true
+        fi
+
+        # a freshly created deployment preview carries no bundle yet, so it always needs one deployed
+        if [[ ${{ inputs.action }} == create-deployment-preview ]]; then
+          BUNDLE_DEPLOY=true
+        fi
+
+        # there is nothing left to deploy to once the preview has been deleted
+        if [[ ${{ inputs.action }} == delete-deployment-preview ]]; then
+          BUNDLE_DEPLOY=false
+        fi
+
         options=""
-        if [[ $DBT_DEPLOY == true ]]; then
-          # Add mount path option
-          if [[ "${{ inputs.mount-path }}" != "" ]]; then
-            options="$options --mount-path=${{ inputs.mount-path }}"
+        if [[ $BUNDLE_DEPLOY == true ]]; then
+          if [[ "${{ inputs.deploy-type }}" == "non-dags" ]]; then
+            options="$options --non-dags-mount-path $(printf '%q' "$MOUNT_PATH")"
+            if [[ -n "$NON_DAGS_BUNDLE_TYPE" ]]; then
+              options="$options --non-dags-bundle-type $(printf '%q' "$NON_DAGS_BUNDLE_TYPE")"
+            fi
+          elif [[ -n "$MOUNT_PATH" ]]; then
+            # Add mount path option
+            options="$options --mount-path=$(printf '%q' "$MOUNT_PATH")"
           fi
 
           # Add description option
@@ -458,11 +559,16 @@ runs:
           fi
         fi
 
-        echo "DBT_DEPLOY=$DBT_DEPLOY" >> $GITHUB_OUTPUT
-        echo "DBT_OPTIONS=$options" >> $GITHUB_OUTPUT
+        echo "BUNDLE_DEPLOY=$BUNDLE_DEPLOY" >> $GITHUB_OUTPUT
+        echo "BUNDLE_OPTIONS=$options" >> $GITHUB_OUTPUT
         echo ::endgroup::
       shell: bash
-      id: dbt-deploy-options
+      id: bundle-deploy-options
+      env:
+        ROOT_FOLDER: ${{ inputs.root-folder }}
+        BUNDLE_TRIGGER_PATHS: ${{ inputs.bundle-trigger-paths }}
+        MOUNT_PATH: ${{ inputs.mount-path }}
+        NON_DAGS_BUNDLE_TYPE: ${{ inputs.non-dags-bundle-type }}
     - name: Get Deploy Type
       if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'image-only' }}
       run: |
@@ -758,7 +864,7 @@ runs:
         echo ::endgroup::
       shell: bash
     - name: DBT Deploy to Astro
-      if: ${{ inputs.deploy-type == 'dbt' && steps.dbt-deploy-options.outputs.DBT_DEPLOY == 'true' }}
+      if: ${{ inputs.deploy-type == 'dbt' && steps.bundle-deploy-options.outputs.BUNDLE_DEPLOY == 'true' }}
       run: |
 
         echo ::group::DBT Deploy to Astro
@@ -768,9 +874,27 @@ runs:
         fi
 
         if [[ "${{ inputs.wait-time }}" != "" ]]; then
-          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.bundle-deploy-options.outputs.BUNDLE_OPTIONS}} --wait-time "${{ inputs.wait-time }}"
         else
-          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.dbt-deploy-options.outputs.DBT_OPTIONS}}
+          astro dbt deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --wait ${{steps.bundle-deploy-options.outputs.BUNDLE_OPTIONS}}
+        fi
+        echo ::endgroup::
+      shell: bash
+    - name: Non-DAG Bundle Deploy to Astro
+      if: ${{ inputs.deploy-type == 'non-dags' && steps.bundle-deploy-options.outputs.BUNDLE_DEPLOY == 'true' }}
+      run: |
+
+        echo ::group::Non-DAG Bundle Deploy to Astro
+        # Deploy root-folder as a non-DAG bundle, mounted for reference by DAGs.
+
+        if [[ "${{ inputs.root-folder }}" != "" ]]; then
+          cd ${{ inputs.root-folder }}
+        fi
+
+        if [[ "${{ inputs.wait-time }}" != "" ]]; then
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --non-dags --wait ${{steps.bundle-deploy-options.outputs.BUNDLE_OPTIONS}} --wait-time "${{ inputs.wait-time }}"
+        else
+          astro deploy ${{steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID}} --non-dags --wait ${{steps.bundle-deploy-options.outputs.BUNDLE_OPTIONS}}
         fi
         echo ::endgroup::
       shell: bash
