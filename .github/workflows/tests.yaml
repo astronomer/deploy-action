@@ -11,9 +11,14 @@ on:
 
 env:
   ASTRO_API_TOKEN: ${{ secrets.ASTRO_API_TOKEN }}
-  # Consumed by .github/workflows/e2e/patch_action_for_dispatch on workflow_dispatch.
-  DEPLOY_ACTION_DIFF_BEFORE: ${{ github.event.before || 'e2e-fake-before' }}
-  DEPLOY_ACTION_DIFF_AFTER: ${{ github.event.after || 'e2e-fake-after' }}
+  # The diff base the action reads, normalized by .github/workflows/e2e/patch_action_for_dispatch.
+  # A real push carries usable SHAs; workflow_dispatch carries none, and a push that creates the
+  # branch reports an all-zero before. The action treats both of those as "cannot diff, deploy
+  # everything", which is right in production but defeats every test that asserts a narrower deploy
+  # or a skip — so they are replaced with sentinels that get past that guard and let the git mocks
+  # decide. The sentinels need not be valid SHAs: git is mocked wherever the decision matters.
+  DEPLOY_ACTION_DIFF_BEFORE: ${{ (github.event.before && github.event.before != '0000000000000000000000000000000000000000') && github.event.before || 'e2e-fake-before' }}
+  DEPLOY_ACTION_DIFF_AFTER: ${{ (github.event.after && github.event.after != '0000000000000000000000000000000000000000') && github.event.after || 'e2e-fake-after' }}
 
 jobs:
   redact-inputs:
@@ -40,18 +45,21 @@ jobs:
           TOKEN=$(jq -r '.inputs.token' $GITHUB_EVENT_PATH)
           echo ::add-mask::$TOKEN
 
-  # Create test deployments would use the template files and generate deployments with unique names
+  # Tests that deploy compare a deployment's versions (and, with wake-on-deploy, its hibernation spec)
+  # before and after, so no two may run against one deployment at once. They are split into chains
+  # that run in parallel, each on its own deployment and each about as long as the preview test:
+  #   a: default (dags) -> infer (dags) -> custom image
+  #   b: default (image-and-dags) -> infer (image-and-dags) -> image only
+  #   c: pytest -> dag deploy -> no deploy -> dbt (no deploy asserts no dbt bundle yet, so it precedes dbt)
+  # once per kind (standard, hibernate), plus one deployment each for the preview and remote tests.
+  # A job later in a chain waits on the earlier one only to take turns, not on its result.
+  # DEPLOYMENTS maps each slot name to its deployment ID; test jobs look theirs up by slot.
   create-test-deployments:
-    name: Create Deployment
+    name: Create Deployments
     needs: redact-inputs
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        deployment: [deployment-hibernate.yaml, deployment.yaml, deployment-remote.yaml]
     outputs:
-      DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.DEPLOYMENT_ID }}
-      HIBERNATE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.HIBERNATE_DEPLOYMENT_ID }}
-      REMOTE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.REMOTE_DEPLOYMENT_ID }}
+      DEPLOYMENTS: ${{ steps.create-deployments.outputs.DEPLOYMENTS }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -88,53 +96,94 @@ jobs:
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
-          # Generate a random test_uid and set it as an environment variable, so we can append it to the deployment name
-          test_uid=$(uuidgen)
-          echo "test_uid=$test_uid" >> $GITHUB_ENV
-
-      - name: Create Deployment
-        id: create-deployment
+      - name: Create Deployments
+        id: create-deployments
+        env:
+          REMOTE_CLUSTER_NAME: ${{ secrets.REMOTE_EXECUTION_CLUSTER_NAME }}
         run: |
 
-          template="e2e-setup/deployment-templates/${{ matrix.deployment }}"
-
-          if [[ "${{ matrix.deployment }}" == "deployment-remote.yaml" ]]; then
-            cluster_name="${{ secrets.REMOTE_EXECUTION_CLUSTER_NAME }}"
-            if [[ -z "$cluster_name" ]]; then
-              echo "::error::REMOTE_EXECUTION_CLUSTER_NAME secret is not set on the e2e-test environment. Add the dedicated cluster's name to enable remote-execution e2e tests."
-              exit 1
-            fi
-            sed -i "s|REMOTE_EXECUTION_CLUSTER_NAME_PLACEHOLDER|$cluster_name|g" "$template"
+          if [[ -z "$REMOTE_CLUSTER_NAME" ]]; then
+            echo "::error::REMOTE_EXECUTION_CLUSTER_NAME secret is not set on the e2e-test environment. Add the dedicated cluster's name to enable remote-execution e2e tests."
+            exit 1
           fi
 
-          # Update the deployment name to maintain uniqueness
-          sed -i "s|  name:.*|  name: deploy-action-e2e-${{ env.test_uid }}|g"  "$template"
+          # slot:template; slot names must match the lookups in the test jobs
+          slots=()
+          for kind in standard hibernate; do
+            template=$([[ $kind == hibernate ]] && echo deployment-hibernate.yaml || echo deployment.yaml)
+            for slot in $kind-a $kind-b $kind-c preview-$kind; do
+              slots+=("$slot:$template")
+            done
+          done
+          slots+=(remote:deployment-remote.yaml)
 
-          DEPLOYMENT_ID=$(astro deployment create --deployment-file "$template" | yq e '.deployment.metadata.deployment_id' -)
-          case "${{ matrix.deployment }}" in
-            deployment.yaml)
-              echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-              ;;
-            deployment-hibernate.yaml)
-              echo "HIBERNATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-              ;;
-            deployment-remote.yaml)
-              echo "REMOTE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-              ;;
-          esac
+          # short random id keeps names unique across runs while staying within the name length limit
+          test_uid=$(uuidgen | cut -c1-8)
+          out="$RUNNER_TEMP/deployments"
+          mkdir -p "$out"
+
+          create() {
+            local slot=$1 file="$out/$1.yaml" name="e2e-$test_uid-$1"
+            cp "e2e-setup/deployment-templates/$2" "$file"
+            sed -i "s|REMOTE_EXECUTION_CLUSTER_NAME_PLACEHOLDER|$REMOTE_CLUSTER_NAME|g; s|  name:.*|  name: $name|" "$file"
+            local attempt created id
+            for attempt in 1 2 3 4 5; do
+              if created=$(astro deployment create --deployment-file "$file" 2> "$out/$slot.err"); then
+                yq e '.deployment.metadata.deployment_id' - <<< "$created" > "$out/$slot.id"
+                return 0
+              fi
+              # a failed create, even a rate-limited one (429), may have created the deployment anyway,
+              # so look it up by name to record its ID for the tests and cleanup instead of creating a duplicate
+              sleep $(( attempt * 10 ))
+              if id=$(astro deployment inspect --clean-output -n "$name" --key metadata.deployment_id < /dev/null 2> /dev/null) && [[ -n "$id" ]]; then
+                echo "Creating $slot failed, but the deployment exists"
+                echo "$id" > "$out/$slot.id"
+                return 0
+              fi
+              # retry rate limits, and duplicate names left by a create whose lookup above was itself rate-limited
+              if ! grep -qE 'status 429|already exists' "$out/$slot.err"; then
+                break
+              fi
+              echo "Creating $slot failed, retrying (attempt $attempt): $(head -1 "$out/$slot.err")"
+            done
+            cat "$out/$slot.err" >&2
+            return 1
+          }
+
+          # creates return once the request is accepted, so running them one by one costs little
+          for entry in "${slots[@]}"; do
+            create "${entry%%:*}" "${entry#*:}" || true
+          done
+
+          # publish whatever was created before failing, so delete-test-deployments can clean it up
+          deployments='{}'
+          missing=()
+          for entry in "${slots[@]}"; do
+            slot=${entry%%:*}
+            id=$(cat "$out/$slot.id" 2>/dev/null || true)
+            if [[ -n "$id" && "$id" != null ]]; then
+              deployments=$(jq -c --arg slot "$slot" --arg id "$id" '. + {($slot): $id}' <<< "$deployments")
+            else
+              missing+=("$slot")
+            fi
+          done
+          echo "DEPLOYMENTS=$deployments" >> $GITHUB_OUTPUT
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Failed to create deployments for: ${missing[*]}"
+            exit 1
+          fi
   default-deploy-tests:
     name: Default Deploy Test
     runs-on: ubuntu-latest
     needs: [create-test-deployments]
     strategy:
-      max-parallel: 1
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
         deploy_type: [dags, image-and-dags]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-{1}', matrix.deployment, matrix.deploy_type == 'dags' && 'a' || 'b')] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -191,7 +240,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -199,15 +248,16 @@ jobs:
       - name: Run Deploy Action
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -215,7 +265,7 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           is_dag_only_deploy: ${{ matrix.deploy_type == 'dags' }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
@@ -228,14 +278,14 @@ jobs:
   dag-deploy-test:
     name: DAG Deploy Test
     runs-on: ubuntu-latest
-    needs: [default-deploy-tests, create-test-deployments]
+    needs: [pytests-test, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     strategy:
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-c', matrix.deployment)] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -278,7 +328,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -286,17 +336,18 @@ jobs:
       - name: Deploy to Astro
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           parse: true
           root-folder: e2e-setup/astro-project
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -304,7 +355,7 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           is_dag_only_deploy: true
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
@@ -316,14 +367,13 @@ jobs:
   pytests-test:
     name: Pytest Test
     runs-on: ubuntu-latest
-    needs: [dag-deploy-test, create-test-deployments]
+    needs: [create-test-deployments]
     strategy:
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-c', matrix.deployment)] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -368,7 +418,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -376,19 +426,20 @@ jobs:
       - name: Run Pytest
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           pytest: true
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -396,7 +447,7 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
           hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
@@ -407,16 +458,15 @@ jobs:
   infer-deploy:
     name: Infer Deploy Test
     runs-on: ubuntu-latest
-    needs: [pytests-test, create-test-deployments]
+    needs: [default-deploy-tests, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     strategy:
-      max-parallel: 1
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
         deploy_type: [dags, image-and-dags]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-{1}', matrix.deployment, matrix.deploy_type == 'dags' && 'a' || 'b')] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -465,7 +515,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -473,18 +523,19 @@ jobs:
       - name: Run Deploy Action
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           parse: true
           action: deploy
           root-folder: e2e-setup/astro-project
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -492,7 +543,7 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           is_dag_only_deploy: ${{ matrix.deploy_type == 'dags' }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
@@ -505,13 +556,13 @@ jobs:
     name: Image Only Deploy Test
     runs-on: ubuntu-latest
     needs: [infer-deploy, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     strategy:
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-b', matrix.deployment)] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -554,7 +605,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -562,18 +613,19 @@ jobs:
       - name: Run Deploy Action
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: deploy
           deploy-type: image-only
           root-folder: e2e-setup/astro-project
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -581,7 +633,7 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           is_image_only_deploy: true
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
@@ -593,16 +645,19 @@ jobs:
   no-deploy-test:
     name: No Deploy Test
     runs-on: ubuntu-latest
-    needs: [image-only-deploy-test, create-test-deployments]
+    needs: [dag-deploy-test, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     strategy:
+      fail-fast: false
+      # the legs share each kind's chain-c deployment, so they take turns
       max-parallel: 1
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
-        deploy_type: [infer, dbt, dags, image-and-dags, image-only]
+        deployment: [standard, hibernate]
+        # unlike the other deploy_type matrices, these values are passed straight to the
+        # action's deploy-type input, so they must be real deploy types
+        deploy_type: [infer, dbt, dags-only, image-and-dags, image-only]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-c', matrix.deployment)] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -648,7 +703,7 @@ jobs:
         if: ${{ matrix.deploy_type != 'dbt' }}
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -656,19 +711,20 @@ jobs:
       - name: Run Deploy Action
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: deploy
           deploy-type: ${{ matrix.deploy_type }}
           root-folder: ${{ matrix.deploy_type == 'dbt' && 'e2e-setup/dbt' || 'e2e-setup/astro-project' }}
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         if: ${{ matrix.deploy_type != 'dbt' }}
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -677,7 +733,7 @@ jobs:
         if: ${{ matrix.deploy_type != 'dbt' }}
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           is_no_deploy: true
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
@@ -691,7 +747,7 @@ jobs:
         if: ${{ matrix.deploy_type == 'dbt' }}
         uses: ./.github/workflows/e2e/get_bundle_info
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -713,14 +769,14 @@ jobs:
   custom-docker-image-test:
     name: Custom Docker Image Test
     runs-on: ubuntu-latest
-    needs: [no-deploy-test, create-test-deployments]
+    needs: [infer-deploy, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     strategy:
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-a', matrix.deployment)] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -761,7 +817,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -769,19 +825,20 @@ jobs:
       - name: Deploy to Astro
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           image-name: custom-image:latest
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ matrix.deployment_id }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -789,11 +846,11 @@ jobs:
       - name: Validate Deploy Action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           dag_tarball_version_before: ${{ steps.get-deployment-before.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before.outputs.desired_image_version }}
           hibernation_spec_before: ${{ steps.get-deployment-before.outputs.hibernation_spec }}
-          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desiredDagTarballVersion }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
           hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
@@ -801,14 +858,14 @@ jobs:
   dbt-deploy-test:
     name: DBT Deploy Test
     runs-on: ubuntu-latest
-    needs: [custom-docker-image-test, create-test-deployments]
+    needs: [no-deploy-test, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     strategy:
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('{0}-c', matrix.deployment)] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -856,19 +913,20 @@ jobs:
       - name: DBT Deploy to Astro
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           parse: true
           root-folder: e2e-setup/dbt
           deploy-type: dbt
           description: "test-dbt-deploy-action"
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
         uses: ./.github/workflows/e2e/get_bundle_info
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -884,7 +942,7 @@ jobs:
 
           updated_at=$(date -u -d "${{ steps.get-dbt-bundle-info.outputs.updated_at }}" +"%s.%N")
           test_start_time=$(date -u -d "${{ steps.setup.outputs.test_start_time }}" +"%s.%N")
-          if [[ $(echo "$updated_at > $test_start_time" | bc -l) ]]; then
+          if (( $(echo "$updated_at > $test_start_time" | bc -l) )); then
             echo "DBT Deploy Action validation succeeded: DBT bundle found"
             exit 0
           fi
@@ -892,15 +950,104 @@ jobs:
           echo "DBT Deploy Action validation failed: DBT bundle was not updated"
           exit 1
 
-  # Remote-execution tests run in parallel to the chain above since they operate on a separate deployment.
-  # The deployment is created with dag_deploy_enabled: false and executor: ASTRO, so the action always
+  # Asserts the action rejects invalid input combinations before it touches Astro. A stub astro on PATH
+  # records every call, so a rejection only counts if it came before anything beyond `astro version`;
+  # an action that got further and then failed for an unrelated reason would otherwise pass. The
+  # control cases must get past validation, which shows the stub sees the calls it is meant to.
+  input-validation-test:
+    name: Input Validation Test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: "improper action"
+            action: bogus
+          - case: "image-trigger-paths with dags-only"
+            deploy_type: dags-only
+            image_trigger_paths: proto/
+          - case: "deployment-name with deployment-id"
+            deployment_name: e2e-validation-only
+          - case: "control: a default deploy"
+            root_folder: e2e-setup/astro-project
+            cli_version: 1.45.0
+            accepted: true
+    env:
+      E2E_STUB_CLI_VERSION: ${{ matrix.cli_version || '1.45.0' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install a stub Astro CLI that records its calls
+        run: |
+          mkdir -p "$RUNNER_TEMP/stub-bin"
+          cat > "$RUNNER_TEMP/stub-bin/astro" <<'EOF'
+          #!/bin/bash
+          echo "$*" >> "$RUNNER_TEMP/astro-calls"
+          if [[ "$1" == "version" ]]; then
+            echo "Astro CLI Version: $E2E_STUB_CLI_VERSION"
+          fi
+          EOF
+          chmod +x "$RUNNER_TEMP/stub-bin/astro"
+          touch "$RUNNER_TEMP/astro-calls"
+          echo "$RUNNER_TEMP/stub-bin" >> $GITHUB_PATH
+
+      - name: Run deploy action
+        id: run-action
+        continue-on-error: true
+        uses: ./
+        with:
+          deployment-id: e2e-validation-only
+          checkout: false
+          deployment-name: ${{ matrix.deployment_name }}
+          action: ${{ matrix.action || 'deploy' }}
+          deploy-type: ${{ matrix.deploy_type || 'infer' }}
+          root-folder: ${{ matrix.root_folder }}
+          image-trigger-paths: ${{ matrix.image_trigger_paths }}
+
+      - name: Validate the action's verdict on the configuration
+        shell: bash
+        env:
+          CASE: ${{ matrix.case }}
+          ACCEPTED: ${{ matrix.accepted || false }}
+          OUTCOME: ${{ steps.run-action.outcome }}
+        run: |
+          echo "astro calls:"
+          cat "$RUNNER_TEMP/astro-calls"
+          past_validation=false
+          if grep -qv '^version' "$RUNNER_TEMP/astro-calls"; then
+            past_validation=true
+          fi
+
+          if [[ "$ACCEPTED" == "true" ]]; then
+            if [[ "$past_validation" != "true" ]]; then
+              echo "Validation test failed: the action rejected a valid configuration ($CASE)"
+              exit 1
+            fi
+            echo "Validation test succeeded: the action accepted '$CASE'"
+            exit 0
+          fi
+
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Validation test failed: the action accepted an invalid configuration ($CASE)"
+            exit 1
+          fi
+          if [[ "$past_validation" == "true" ]]; then
+            echo "Validation test failed: the action got past validation before failing ($CASE)"
+            exit 1
+          fi
+          echo "Validation test succeeded: the action rejected '$CASE'"
+
+  # The remote deployments are created with dag_deploy_enabled: false and executor: ASTRO, so the action always
   # produces an image deploy regardless of which mock is in place.
   remote-deploy-test:
     name: Remote Deploy Test
     runs-on: ubuntu-latest
     needs: [create-test-deployments]
-    # Skip when the remote dedicated cluster isn't configured for this repo.
-    if: needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID != ''
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)['remote'] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -941,7 +1088,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -949,17 +1096,18 @@ jobs:
       - name: Run Deploy Action
         uses: ./
         with:
-          deployment-id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -980,8 +1128,9 @@ jobs:
     name: Remote Custom Image Test
     runs-on: ubuntu-latest
     needs: [remote-deploy-test, create-test-deployments]
-    # Skip when the remote dedicated cluster isn't configured for this repo.
-    if: needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID != ''
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)['remote'] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -1020,7 +1169,7 @@ jobs:
         id: get-deployment-before
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1028,18 +1177,19 @@ jobs:
       - name: Deploy to Astro
         uses: ./
         with:
-          deployment-id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           image-name: custom-remote-image:latest
           action: deploy
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after
         uses: ./.github/workflows/e2e/get_deployment_info
         with:
-          deployment_id: ${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
           organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
           astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
@@ -1056,18 +1206,16 @@ jobs:
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
           hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
-  # Deployment preview tests can run in parallel to above tests since it operates on a different deployment, so it won't interfere with the above tests
   deployment-preview-test:
     name: Deployment Preview Test
     runs-on: ubuntu-latest
     needs: [create-test-deployments]
     strategy:
+      fail-fast: false
       matrix:
-        deployment_id:
-          [
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}",
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}",
-          ]
+        deployment: [standard, hibernate]
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)[format('preview-{0}', matrix.deployment)] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1111,17 +1259,17 @@ jobs:
         id: create-deployment-preview
         uses: ./
         with:
-          deployment-id: ${{ matrix.deployment_id }}
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: create-deployment-preview
-          preview-name: test-preview-${{ matrix.deployment_id }}
+          preview-name: test-preview-${{ env.E2E_DEPLOYMENT_ID }}
           root-folder: e2e-setup/astro-project
           # TODO: allow copying airflow resources, once we add wait in the deploy action for deployment preview to be healthy
           copy-connections: false
           copy-airflow-variables: false
           copy-pools: false
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-create-preview
@@ -1136,7 +1284,7 @@ jobs:
         id: validate-deployment-preview-create
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           dag_tarball_version_before: ""
           image_version_before: "12.7.1"
           hibernation_spec_before: '{"schedules":[{"isEnabled":true,"hibernateAtCron":"0 * * * *","wakeAtCron":"1 * * * *"},{"isEnabled":true,"hibernateAtCron":"1 * * * *","wakeAtCron":"0 * * * *"}]}'
@@ -1170,9 +1318,9 @@ jobs:
           action: deploy-deployment-preview
           deploy-type: image-and-dags
           root-folder: e2e-setup/astro-project
-          preview-name: test-preview-${{ matrix.deployment_id }}
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          preview-name: test-preview-${{ env.E2E_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After Test
         id: get-deployment-after-deploy-preview
@@ -1187,7 +1335,7 @@ jobs:
         id: validate-deployment-preview-deploy
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           dag_tarball_version_before: ${{ steps.get-deployment-before-deploy.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before-deploy.outputs.desired_image_version }}
           hibernation_spec_before: ${{ steps.get-deployment-before-deploy.outputs.hibernation_spec }}
@@ -1222,9 +1370,9 @@ jobs:
           parse: true
           deploy-type: dags-only
           root-folder: e2e-setup/astro-project
-          preview-name: test-preview-${{ matrix.deployment_id }}
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          preview-name: test-preview-${{ env.E2E_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get Deployment Info After DAG Deploy Test
         id: get-deployment-after-dag-deploy
@@ -1239,7 +1387,7 @@ jobs:
         id: validate-dag-deploy-action
         uses: ./.github/workflows/e2e/validate_deployment
         with:
-          is_wake_on_deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
           is_dag_only_deploy: true
           dag_tarball_version_before: ${{ steps.get-deployment-before-dag-deploy.outputs.desired_dag_tarball_version }}
           image_version_before: ${{ steps.get-deployment-before-dag-deploy.outputs.desired_image_version }}
@@ -1266,9 +1414,9 @@ jobs:
           deploy-type: dbt
           description: "test-dbt-deploy-action"
           root-folder: e2e-setup/dbt
-          preview-name: test-preview-${{ matrix.deployment_id }}
-          wake-on-deploy: ${{ matrix.deployment_id == needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}
-          wait-time: 300s
+          preview-name: test-preview-${{ env.E2E_DEPLOYMENT_ID }}
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
 
       - name: Get DBT bundle info
         id: get-dbt-bundle-info
@@ -1290,7 +1438,7 @@ jobs:
 
           updated_at=$(date -u -d "${{ steps.get-dbt-bundle-info.outputs.updated_at }}" +"%s.%N")
           test_start_time=$(date -u -d "${{ steps.setup.outputs.test_start_time }}" +"%s.%N")
-          if [[ $(echo "$updated_at > $test_start_time" | bc -l) ]]; then
+          if (( $(echo "$updated_at > $test_start_time" | bc -l) )); then
             echo "DBT Deploy Action validation succeeded: DBT bundle found"
             exit 0
           fi
@@ -1311,7 +1459,7 @@ jobs:
           deployment-id: ${{ steps.create-deployment-preview.outputs.preview-id }}
           workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
           action: delete-deployment-preview
-          preview-name: test-preview-${{ matrix.deployment_id }}
+          preview-name: test-preview-${{ env.E2E_DEPLOYMENT_ID }}
 
       - name: Validate Deployment Preview Deletion
         id: validate-deployment-preview-deletion
@@ -1326,13 +1474,17 @@ jobs:
           astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
   delete-test-deployments:
-    name: Delete Deployment
+    name: Delete Deployments
     runs-on: ubuntu-latest
     needs:
       [
         create-test-deployments,
+        default-deploy-tests,
         dag-deploy-test,
         pytests-test,
+        infer-deploy,
+        image-only-deploy-test,
+        no-deploy-test,
         custom-docker-image-test,
         dbt-deploy-test,
         deployment-preview-test,
@@ -1373,15 +1525,27 @@ jobs:
           astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
           astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
 
-      - name: Delete Deployment
+      - name: Delete Deployments
+        env:
+          DEPLOYMENTS: ${{ needs.create-test-deployments.outputs.DEPLOYMENTS }}
         run: |
-          # Each ID is only set if its corresponding deployment was created;
-          # skip the delete when the upstream job didn't produce one.
-          for id in \
-            "${{ needs.create-test-deployments.outputs.DEPLOYMENT_ID }}" \
-            "${{ needs.create-test-deployments.outputs.HIBERNATE_DEPLOYMENT_ID }}" \
-            "${{ needs.create-test-deployments.outputs.REMOTE_DEPLOYMENT_ID }}"; do
-            if [[ -n "$id" ]]; then
-              astro deployment delete -f "$id"
+          # only the deployments that were actually created are in the map
+          ids=$(jq -r '.[]' <<< "${DEPLOYMENTS:-"{}"}")
+          # a deployment preview is named after the deployment it was made from; one whose test failed or
+          # was cancelled before the preview's own delete step is still there, so delete it too
+          for id in $ids; do
+            if preview_id=$(astro deployment inspect --clean-output -n "test-preview-$id" --key metadata.deployment_id < /dev/null 2> /dev/null) && [[ -n "$preview_id" ]]; then
+              echo "Deleting leftover deployment preview test-preview-$id"
+              ids="$ids $preview_id"
             fi
           done
+          pids=()
+          for id in $ids; do
+            astro deployment delete -f "$id" &
+            pids+=($!)
+          done
+          failed=0
+          for pid in "${pids[@]}"; do
+            wait "$pid" || failed=1
+          done
+          exit $failed
