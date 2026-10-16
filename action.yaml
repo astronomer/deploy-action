@@ -130,7 +130,8 @@ inputs:
     default: ""
     description: >
       Deploy DAGs to a named DAG bundle on the Deployment instead of the default bundle. Requires Airflow 3, and the
-      bundle must already exist on the Deployment. Use with `deploy-type: dags-only` or `image-and-dags`. Requires Astro CLI 1.44.0 or higher.
+      bundle must already exist on the Deployment; `create-deployment-preview` copies the original Deployment's bundles
+      to the preview. Use with `deploy-type: dags-only` or `image-and-dags`. Requires Astro CLI 1.44.0 or higher.
   dags-path:
     required: false
     default: ""
@@ -471,8 +472,73 @@ runs:
             astro deployment create --deployment-file deployment-preview-template.yaml
           fi
 
+          PREVIEW_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)
+
+          # The template carries no bundles, so recreate the original Deployment's on the preview: DAG bundles
+          # by name, since a deploy into a named bundle needs it to exist, then non-DAG bundles, linked to the
+          # preview's DAG bundles of the same names. Only the bundles are copied; the preview's deploys fill them.
+          if [[ -z "$CLI_VERSION" ]] || ! command -v semver >/dev/null 2>&1 || ! semver -r ">=1.44.0" "$CLI_VERSION" >/dev/null 2>&1; then
+            echo "::notice::Astro CLI ${CLI_VERSION:-(unknown version)} has no bundle commands (added in 1.44.0), so bundles on the original Deployment were not copied to the preview"
+          elif ! command -v jq >/dev/null 2>&1; then
+            echo "::warning::jq is not installed, so bundles on the original Deployment were not copied to the preview"
+          else
+            # with ASTRO_API_TOKEN set, the CLI prints "Using an Astro API Token" to stdout ahead of the JSON
+            list_bundles() {
+              astro deployment bundle list --deployment-id "$1" --json | jq -Rsc 'sub("^[^{]*"; "") | fromjson | .bundles // []'
+            }
+            SOURCE_BUNDLES=$(list_bundles "$DEPLOYMENT_ID" | jq -c 'map(select(.deletionIsPending != true))')
+
+            # DAG bundles the preview lacks, by name
+            PREVIEW_BUNDLES=$(list_bundles "$PREVIEW_ID")
+            MISSING_DAG_BUNDLES=$(jq -r --argjson preview "$PREVIEW_BUNDLES" '
+              ($preview | map(select(.isDagBundle == true) | .name)) as $existing
+              | .[]
+              | select(.isDagBundle == true and (.name // "") != "" and (.name | IN($existing[]) | not))
+              | .name
+            ' <<< "$SOURCE_BUNDLES")
+            while IFS= read -r name; do
+              if [[ -n $name ]]; then
+                echo "Copying DAG bundle '$name' to the preview"
+                astro deployment bundle create --deployment-id "$PREVIEW_ID" --name "$name"
+              fi
+            done <<< "$MISSING_DAG_BUNDLES"
+
+            # non-DAG bundles the preview lacks, by mount path, each linked to the preview's copies of the
+            # DAG bundles it is linked to on the original
+            PREVIEW_BUNDLES=$(list_bundles "$PREVIEW_ID")
+            MISSING_NON_DAG_BUNDLES=$(jq -c --argjson preview "$PREVIEW_BUNDLES" '
+              (map(select(.isDagBundle == true) | {key: .id, value: (.name // "")}) | from_entries) as $source_dag_names
+              | ($preview | map(select(.isDagBundle == true and .name != null) | {key: .name, value: .id}) | from_entries) as $preview_dag_ids
+              | ($preview | map(select(.isDagBundle != true) | .nonDagMountPath)) as $existing
+              | .[]
+              | select(.isDagBundle != true and (.nonDagMountPath // "") != "" and (.nonDagMountPath | IN($existing[]) | not))
+              | {
+                  mount_path: .nonDagMountPath,
+                  bundle_type: (.nonDagBundleType // ""),
+                  dag_bundle_ids: ([.dagBundleIds[]? | $preview_dag_ids[$source_dag_names[.] // ""] // empty] | join(","))
+                }
+            ' <<< "$SOURCE_BUNDLES")
+            while IFS= read -r bundle; do
+              if [[ -z $bundle ]]; then
+                continue
+              fi
+              mount_path=$(jq -r .mount_path <<< "$bundle")
+              bundle_type=$(jq -r .bundle_type <<< "$bundle")
+              dag_bundle_ids=$(jq -r .dag_bundle_ids <<< "$bundle")
+              create_args=(--deployment-id "$PREVIEW_ID" --mount-path "$mount_path")
+              if [[ -n $bundle_type ]]; then
+                create_args+=(--bundle-type "$bundle_type")
+              fi
+              if [[ -n $dag_bundle_ids ]]; then
+                create_args+=(--dag-bundle-ids "$dag_bundle_ids")
+              fi
+              echo "Copying non-DAG bundle mounted at '$mount_path' to the preview"
+              astro deployment bundle create "${create_args[@]}"
+            done <<< "$MISSING_NON_DAG_BUNDLES"
+          fi
+
           # Get final Deployment ID
-          echo "FINAL_DEPLOYMENT_ID=$(astro deployment inspect --clean-output -n $BRANCH_DEPLOYMENT_NAME --key metadata.deployment_id)" >> $GITHUB_OUTPUT
+          echo "FINAL_DEPLOYMENT_ID=$PREVIEW_ID" >> $GITHUB_OUTPUT
 
           # Get original Deployment ID
           echo "ORIGINAL_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
@@ -757,6 +823,13 @@ runs:
         if [[ ${{ inputs.image-name }} != "no-custom-image" || "${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }}" == "false" || ${{ inputs.action }} == create-deployment-preview ]]; then
           SKIP_IMAGE_OR_DAGS_DEPLOY=false
           DAGS_ONLY_DEPLOY=false
+        fi
+
+        # a new preview has no DAGs yet, so a dags-only step deploys its DAGs there, as bundle steps do
+        if [[ ${{ inputs.action }} == create-deployment-preview && ${{ inputs.deploy-type }} == 'dags-only' ]]; then
+          if [[ "$(astro deployment inspect ${{ steps.deployment-preview.outputs.FINAL_DEPLOYMENT_ID }} --clean-output --key configuration.dag_deploy_enabled)" == "true" ]]; then
+            DAGS_ONLY_DEPLOY=true
+          fi
         fi
 
         # with no diff to go on, a dags-only step deploys its DAGs, as the other deploy types deploy everything
