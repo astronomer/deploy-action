@@ -37,6 +37,9 @@ outputs:
   desired_version:
     description: The version the Deployment has been asked to serve, empty when not found
     value: ${{ steps.get-deployment-bundle.outputs.desired_version }}
+  dag_bundle_ids:
+    description: For a non-DAG bundle, the comma-separated IDs of the DAG bundles it is served alongside
+    value: ${{ steps.get-deployment-bundle.outputs.dag_bundle_ids }}
 
 runs:
   using: "composite"
@@ -72,6 +75,7 @@ runs:
           echo "bundle_id=" >> $GITHUB_OUTPUT
           echo "current_version=" >> $GITHUB_OUTPUT
           echo "desired_version=" >> $GITHUB_OUTPUT
+          echo "dag_bundle_ids=" >> $GITHUB_OUTPUT
           exit 0
         fi
 
@@ -80,3 +84,4 @@ runs:
         echo "bundle_id=$(echo "$bundle" | jq -r '.id')" >> $GITHUB_OUTPUT
         echo "current_version=$(echo "$bundle" | jq -r '.currentVersion // ""')" >> $GITHUB_OUTPUT
         echo "desired_version=$(echo "$bundle" | jq -r '.desiredVersion // ""')" >> $GITHUB_OUTPUT
+        echo "dag_bundle_ids=$(echo "$bundle" | jq -r '(.dagBundleIds // []) | join(",")')" >> $GITHUB_OUTPUT
