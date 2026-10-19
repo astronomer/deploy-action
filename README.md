@@ -53,7 +53,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs, a DBT project, or a non-DAG bundle. Possible options are `infer`, `dags-only`, `image-and-dags`, `image-only`, `dbt` or `non-dags`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. For description on each deploy type checkout [deploy type details](https://github.com/astronomer/deploy-action#deploy-type-details) |
 | `image-trigger-paths` | `` | Comma- or newline-separated list of paths outside `root-folder` that should also trigger a deploy when changed. Useful in monorepos where files built or copied into the image at deploy time (e.g. generated protos) live outside the Astro project. A change under any of these paths forces an image deploy instead of being skipped. Paths are matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory (e.g. `proto/`). Only applies to the `infer`, `image-and-dags`, and `image-only` deploy types. For `dbt` and `non-dags` deploys, use `bundle-trigger-paths`. |
 | `bundle-trigger-paths` | `` | Comma- or newline-separated list of paths outside `root-folder` that should also trigger a bundle deploy when changed. Useful in monorepos where a bundle depends on shared files that live outside its own directory. Paths are matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory (e.g. `shared/macros/`). Only applies to the `dbt` and `non-dags` deploy types. |
-| `skip-unchanged` | `true` | When `true` (default), the action skips the deploy if no changed files fall under `root-folder` (or `image-trigger-paths` / `bundle-trigger-paths`). Set to `false` to disable this diff-based skip and always run the deploy dictated by `deploy-type`. This is the closest replacement for the deprecated `deploy-image: true` behavior. |
+| `skip-unchanged` | `true` | When `true` (default), the action skips the deploy if no changed files fall under `root-folder` or `dags-path` (or `image-trigger-paths` / `bundle-trigger-paths`). Set to `false` to disable this diff-based skip and always run the deploy dictated by `deploy-type`. This is the closest replacement for the deprecated `deploy-image: true` behavior. |
 | `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too. |
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
@@ -70,6 +70,9 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `build-secrets` | `` | Newline-delimited list of Docker build secrets, one `docker build --secret` specification per line (e.g. `id=mysecret,src=secrets.txt`). Each line is passed to `astro deploy` as its own `--build-secret` flag. See https://docs.docker.com/build/building/secrets/ for more information. |
 | `mount-path` | `` | Path to mount the bundle in Airflow, for reference by DAGs. Required with `deploy-type: non-dags`. With `deploy-type: dbt` it is optional and defaults to /usr/local/airflow/dbt/{dbt project name} |
 | `non-dags-bundle-type` | `` | Free-form label identifying the kind of non-DAG bundle being deployed (e.g. `dbt`), shown in the Deploy History tab. Only applies to the `non-dags` deploy type. Requires Astro CLI 1.44.0 or higher. |
+| `dag-bundle-name` | `` | Deploy DAGs to a named DAG bundle on the Deployment instead of the default bundle. Requires Airflow 3, and the bundle must already exist on the Deployment. Use with `deploy-type: dags-only` or `image-and-dags`. Requires Astro CLI 1.44.0 or higher. |
+| `dags-path` | `` | Deploy DAGs from this path, relative to `root-folder`, instead of the project's `dags` directory. Useful for serving several DAG bundles out of one repository, one action invocation per bundle. A `dags-only` deploy classifies changes against this path instead of `dags/`, and with Astro CLI 1.45.0 or higher (and `parse` and `pytest` off) it needs no Astro project, so `root-folder` can be left empty. Use with `deploy-type: dags-only` or `image-and-dags`. |
+| `no-dags-base-dir` | `false` | If true, exclude the DAGs directory prefix from the uploaded bundle. Use for Airflow 3 Deployments, where the bundle root is already on `sys.path`. Use with `deploy-type` `infer`, `dags-only`, or `image-and-dags`, and not with `image-name`. |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `sparse-checkout` | `` | Comma- or newline-separated list of cone-mode sparse-checkout patterns passed to `actions/checkout`. When set, only the listed paths (plus repo-root files) are checked out, which can dramatically reduce checkout size for large monorepos. Typically set to the same value as `root-folder`. Works only when `checkout` is set to `true`. Leave empty for a full checkout (default). |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
@@ -99,7 +102,7 @@ The following section describe each of the deploy type input value in detail to 
 
 3. `dags-only`: In this mode, deploy-action would run through all the file changes:
   - if there are no file changes in the configured root-folder then it skips deploy
-  - if all the file changes are in folders except `dags` folder then it skips deploy
+  - if all the file changes are in folders except `dags` folder (or `dags-path`, when set) then it skips deploy
   - if the changed files cannot be determined (a manual workflow dispatch, a new branch, or a missing diff base) it would do a dag only deploy
   - otherwise it would do a dag only deploy
 
@@ -178,6 +181,40 @@ not change how the bundle is handled.
 > [!IMPORTANT]
 > The bundle directory must not sit inside an Astro project. `astro-project/` and `sql/` as siblings works; `astro-project/sql/`
 > is rejected by the Astro CLI. Keep the bundle a sibling of the Astro project in the repository.
+
+## Named DAG bundles
+
+On Airflow 3 Deployments, DAGs can be served from several named bundles instead of a single default one. `dag-bundle-name`
+targets one of them; the bundle must already exist on the Deployment, since the deploy does not create it. Requires Astro
+CLI 1.44.0 or higher.
+
+```yaml
+- name: Deploy team A's DAGs
+  uses: astronomer/deploy-action@v0.16.0
+  with:
+    deployment-id: <deployment-id>
+    deploy-type: dags-only
+    dags-path: bundles/team-a
+    dag-bundle-name: team-a
+```
+
+A named bundle's DAGs don't have to live in an Astro project. With Astro CLI 1.45.0 or higher, a `dags-only` deploy with
+`dags-path` set (and `parse` and `pytest` off) needs no project, so leave `root-folder` empty and point `dags-path` at the
+bundle's directory from the repository root. `dags-path` is otherwise resolved from `root-folder`.
+
+To serve several DAG bundles out of one repository, use one action invocation per bundle, each with its own `dags-path` and
+`dag-bundle-name`. With `dags-path` set, a `dags-only` deploy classifies changes against that path instead of `dags/`, so
+each bundle only deploys when its own DAGs change. `dag-bundle-name` and `dags-path` cannot be used with `deploy-type: infer`
+(the default), which would build and deploy the project's image for any change outside the bundle: use `dags-only`, or
+`image-and-dags` to deliberately deploy the image as well.
+
+`no-dags-base-dir` excludes the DAGs directory prefix from the uploaded bundle, which is what Airflow 3 expects when the
+bundle root is already on `sys.path`.
+
+`dag-bundle-name`, `dags-path`, and `no-dags-base-dir` cannot be combined with `image-name` on deploys that use it, because
+a pre-built image carries its own DAGs. None of them can be used with `deploy-type` `image-only`, `dbt`, or `non-dags`,
+which deploy no DAGs.
+
 
 ## Installing the Astro CLI
 
@@ -431,6 +468,50 @@ steps:
     deployment-id: <deployment id>
     root-folder: astro-project/
     parse: true
+```
+
+### Deploy several bundles from the same repo
+
+In the following example we would deploy the image from `astro-project`, two named DAG bundles from `bundles/`, and a
+non-DAG bundle of SQL assets, all from the same repository. The bundles sit outside the Astro project, so each step only
+deploys when its own files change: a change to team A's DAGs does not redeploy team B's, or rebuild the image. See
+[named DAG bundles](https://github.com/astronomer/deploy-action#named-dag-bundles) and
+[non-DAG bundle deploys](https://github.com/astronomer/deploy-action#non-dag-bundle-deploys) for the details.
+
+```yaml
+steps:
+- name: Install Astro CLI
+  uses: astronomer/setup-astro-cli@v0.0.1
+  with:
+    version: "1.45.0"  # DAG bundles deployed outside an Astro project require CLI >= 1.45.0
+- name: Image Deploy to Astro
+  uses: astronomer/deploy-action@v0.16.0
+  with:
+    deployment-id: <deployment id>
+    deploy-type: image-only
+    root-folder: astro-project
+- name: Deploy team A's DAGs
+  uses: astronomer/deploy-action@v0.16.0
+  with:
+    deployment-id: <deployment id>
+    deploy-type: dags-only
+    dags-path: bundles/team-a
+    dag-bundle-name: team-a
+- name: Deploy team B's DAGs
+  uses: astronomer/deploy-action@v0.16.0
+  with:
+    deployment-id: <deployment id>
+    deploy-type: dags-only
+    dags-path: bundles/team-b
+    dag-bundle-name: team-b
+- name: Deploy SQL assets
+  uses: astronomer/deploy-action@v0.16.0
+  with:
+    deployment-id: <deployment id>
+    deploy-type: non-dags
+    root-folder: sql
+    mount-path: /usr/local/airflow/sql
+    non-dags-bundle-type: sql
 ```
 
 ### Wake on deploy

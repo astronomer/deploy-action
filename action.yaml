@@ -97,7 +97,7 @@ inputs:
     required: false
     default: true
     description: >
-      When true (default), the action skips the deploy if no changed files fall under `root-folder` (or
+      When true (default), the action skips the deploy if no changed files fall under `root-folder` or `dags-path` (or
       `image-trigger-paths` / `bundle-trigger-paths`). Set to false to disable this diff-based skip and always run the deploy dictated by
       `deploy-type` on every run. This is the closest replacement for the deprecated `deploy-image: true` behavior.
   build-secrets:
@@ -125,6 +125,28 @@ inputs:
       Comma- or newline-separated list of paths outside `root-folder` that should also trigger a bundle deploy when changed. Useful in monorepos where a bundle depends on shared files that live outside its own directory. Paths are
       matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory
       (e.g. `shared/macros/`). Only applies to the `dbt` and `non-dags` deploy types.
+  dag-bundle-name:
+    required: false
+    default: ""
+    description: >
+      Deploy DAGs to a named DAG bundle on the Deployment instead of the default bundle. Requires Airflow 3, and the
+      bundle must already exist on the Deployment. Use with `deploy-type: dags-only` or `image-and-dags`. Requires Astro CLI 1.44.0 or higher.
+  dags-path:
+    required: false
+    default: ""
+    description: >
+      Deploy DAGs from this path, relative to `root-folder`, instead of the project's `dags` directory. Useful for
+      serving several DAG bundles out of one repository, one action invocation per bundle. A `dags-only` deploy
+      classifies changes against this path instead of `dags/`, and with Astro CLI 1.45.0 or higher (and `parse` and
+      `pytest` off) it needs no Astro project, so `root-folder` can be left empty. Use with `deploy-type: dags-only` or
+      `image-and-dags`.
+  no-dags-base-dir:
+    required: false
+    default: false
+    description: >
+      If true, exclude the DAGs directory prefix from the uploaded bundle. Use for Airflow 3 Deployments, where the
+      bundle root is already on sys.path. Use with `deploy-type: infer`, `dags-only`, or `image-and-dags`, and not with
+      `image-name`.
   checkout-submodules:
     required: false
     default: false
@@ -221,6 +243,15 @@ runs:
           fi
         fi
 
+        # Check if the Astro CLI version is less than 1.44.0 for named DAG bundles
+        if [[ "$DAG_BUNDLE_NAME" != "" && $CLI_VERSION != "" ]]; then
+          REQUIRED_VERSION="1.44.0"
+          if ! semver -r ">=${REQUIRED_VERSION}" "${CLI_VERSION}"; then
+            echo "The dag-bundle-name option requires Astro CLI version $REQUIRED_VERSION or higher"
+            exit 1
+          fi
+        fi
+
         # skip Astro CLI installation if already installed
         if command -v astro &> /dev/null; then
           echo "Astro CLI is already installed"
@@ -248,6 +279,8 @@ runs:
         fi
         echo ::endgroup::
       shell: bash
+      env:
+        DAG_BUNDLE_NAME: ${{ inputs.dag-bundle-name }}
     - name: Determine Deploy Deployment
       run: |
 
@@ -325,8 +358,48 @@ runs:
             echo "ERROR: root-folder is required with deploy-type non-dags"
             exit 1 # terminate and indicate error
           fi
-        fi
 
+          # the DAG options below only apply to deploys that carry DAGs
+          for dag_option in "dag-bundle-name:$DAG_BUNDLE_NAME" "dags-path:$DAGS_PATH" "no-dags-base-dir:$NO_DAGS_BASE_DIR"; do
+            option_name="${dag_option%%:*}"
+            option_value="${dag_option#*:}"
+            if [[ -z "$option_value" || "$option_value" == "false" ]]; then
+              continue
+            fi
+            if [[ "${{ inputs.deploy-type }}" == "image-only" || "${{ inputs.deploy-type }}" == "dbt" || "${{ inputs.deploy-type }}" == "non-dags" ]]; then
+              echo "ERROR: $option_name is only supported with deploy-type infer, dags-only, or image-and-dags"
+              exit 1 # terminate and indicate error
+            fi
+            # the CLI rejects these options alongside a pre-built image, which carries its own DAGs
+            if [[ "${{ inputs.image-name }}" != "no-custom-image" ]]; then
+              echo "ERROR: $option_name cannot be used with image-name"
+              exit 1 # terminate and indicate error
+            fi
+          done
+          # a step deploying one bundle must never fall back to building the project's image, which infer
+          # does for any change it doesn't classify as a DAG
+          if [[ ( -n "$DAG_BUNDLE_NAME" || -n "$DAGS_PATH" ) && "${{ inputs.deploy-type }}" == "infer" ]]; then
+            echo "ERROR: dag-bundle-name and dags-path cannot be used with deploy-type infer (the default); set deploy-type to dags-only, or image-and-dags to also deploy the image"
+            exit 1 # terminate and indicate error
+          fi
+
+          # dags-path is resolved from root-folder, the CLI's working directory; changes are matched against
+          # its repo-relative form, so DAGs outside the Astro project are still picked up
+          DAGS_DIR=""
+          if [[ -n "$DAGS_PATH" ]]; then
+            if ! dags_abs=$(cd "${ROOT_FOLDER:-.}" 2> /dev/null && cd "$DAGS_PATH" 2> /dev/null && pwd); then
+              echo "ERROR: dags-path '$DAGS_PATH' is not a directory"
+              exit 1 # terminate and indicate error
+            fi
+            if [[ $dags_abs != "$PWD" && $dags_abs != "$PWD"/* ]]; then
+              echo "ERROR: dags-path must resolve to a directory inside the repository"
+              exit 1 # terminate and indicate error
+            fi
+            DAGS_DIR=${dags_abs#"$PWD"}
+            DAGS_DIR=${DAGS_DIR#/}
+          fi
+          echo "DAGS_DIR=$DAGS_DIR" >> $GITHUB_OUTPUT
+        fi
 
         # Select workspace if specified
         if [[ "${{ inputs.workspace }}" != "" ]]; then
@@ -468,6 +541,9 @@ runs:
         BUNDLE_TRIGGER_PATHS: ${{ inputs.bundle-trigger-paths }}
         MOUNT_PATH: ${{ inputs.mount-path }}
         NON_DAGS_BUNDLE_TYPE: ${{ inputs.non-dags-bundle-type }}
+        DAG_BUNDLE_NAME: ${{ inputs.dag-bundle-name }}
+        DAGS_PATH: ${{ inputs.dags-path }}
+        NO_DAGS_BASE_DIR: ${{ inputs.no-dags-base-dir }}
     - name: Determine if DAG Deploy is enabled
       run: |
 
@@ -590,6 +666,17 @@ runs:
         DIFF_UNAVAILABLE=false
         files=()
 
+        # a changed file counts as a DAG when it sits under the project's dags directory, or under
+        # dags-path when the DAGs are served from somewhere else (e.g. one bundle of several in a repo).
+        # DAGS_DIR is dags-path in repo-relative form, empty when it is the repo root itself.
+        is_dag_file() {
+          if [[ -n "$DAGS_PATH" ]]; then
+            [[ -z "$DAGS_DIR" || $1 == "$DAGS_DIR/"* ]]
+          else
+            [[ $1 == *"dags/"* ]]
+          fi
+        }
+
         # collect image-trigger-paths (comma- or newline-separated), trimmed and non-empty
         IMAGE_TRIGGER_PATHS="${{ inputs.image-trigger-paths }}"
         IMAGE_TRIGGERS=()
@@ -629,11 +716,12 @@ runs:
             fi
           done
 
-          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]]; then
-            echo $file is part of the input root folder
+          # dags-path may sit outside root-folder (DAGs deployed independently of the Astro project)
+          if [[ $file =~ ^"${{ inputs.root-folder }}".* ]] || { [[ -n "$DAGS_PATH" ]] && is_dag_file "$file"; }; then
+            echo $file is part of the input root folder or dags-path
             SKIP_IMAGE_OR_DAGS_DEPLOY=false
             if [[ ${{ inputs.deploy-type }} == 'infer' ]]; then
-              if [[ $file == *"dags/"* ]]; then
+              if is_dag_file "$file"; then
                 echo $file is part of dags folder
                 DAGS_ONLY_DEPLOY=true
               else
@@ -641,7 +729,7 @@ runs:
                 break
               fi
             elif [[ ${{ inputs.deploy-type }} == 'dags-only' ]]; then
-              if [[ $file == *"dags/"* ]]; then
+              if is_dag_file "$file"; then
                 echo $file is part of dags folder
                 DAGS_ONLY_DEPLOY=true
               fi
@@ -708,6 +796,10 @@ runs:
         echo ::endgroup::
       shell: bash
       id: deploy-type
+      env:
+        ROOT_FOLDER: ${{ inputs.root-folder }}
+        DAGS_PATH: ${{ inputs.dags-path }}
+        DAGS_DIR: ${{ steps.deployment-preview.outputs.DAGS_DIR }}
     # If only DAGs changed and dag deploys is enabled, do a DAG-only deploy
     - name: Setup image or dags deploy options
       if: ${{ inputs.deploy-type == 'infer' || inputs.deploy-type == 'dags-only' || inputs.deploy-type == 'image-and-dags' || inputs.deploy-type == 'image-only' }}
@@ -776,12 +868,33 @@ runs:
           fi
         fi
 
+        # the DAG options below are meaningless for an image-only deploy, which leaves DAGs untouched
+        if [[ ${{ inputs.deploy-type }} != "image-only" ]]; then
+          # add named DAG bundle option
+          if [[ -n "$DAG_BUNDLE_NAME" ]]; then
+            options="$options --dag-bundle-name $(printf '%q' "$DAG_BUNDLE_NAME")"
+          fi
+
+          # add custom dags path option
+          if [[ -n "$DAGS_PATH" ]]; then
+            options="$options --dags-path $(printf '%q' "$DAGS_PATH")"
+          fi
+
+          # add no dags base dir option
+          if [[ "$NO_DAGS_BASE_DIR" == true ]]; then
+            options="$options --no-dags-base-dir"
+          fi
+        fi
+
         echo "OPTIONS=$options" >> $GITHUB_OUTPUT
         echo ::endgroup::
       shell: bash
+      id: deploy-options
       env:
         BUILD_SECRETS: ${{ inputs.build-secrets }}
-      id: deploy-options
+        DAG_BUNDLE_NAME: ${{ inputs.dag-bundle-name }}
+        DAGS_PATH: ${{ inputs.dags-path }}
+        NO_DAGS_BASE_DIR: ${{ inputs.no-dags-base-dir }}
     - name: Determine if Development Mode is enabled
       if: ${{ inputs.wake-on-deploy == 'true' && inputs.action != 'delete-deployment-preview' }}
       run: |
