@@ -364,6 +364,53 @@ jobs:
           image_version_after: ${{ steps.get-deployment-after.outputs.desired_image_version }}
           hibernation_spec_after: ${{ steps.get-deployment-after.outputs.hibernation_spec }}
 
+      - name: Re-patch deploy-action before the dispatch invocation
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Deployment Info Before A Workflow Dispatch
+        id: get-deployment-before-dispatch
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      # a workflow_dispatch has no diff, so a dags-only deploy must deploy the DAGs rather than skip
+      - name: Deploy DAGs a Workflow Dispatch
+        uses: ./
+        env:
+          DEPLOY_ACTION_DIFF_BEFORE: ""
+          DEPLOY_ACTION_DIFF_AFTER: ""
+        with:
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          deploy-type: dags-only
+          root-folder: e2e-setup/astro-project
+          wake-on-deploy: ${{ matrix.deployment == 'hibernate' }}
+          wait-time: 15m
+
+      - name: Get Deployment Info After A Workflow Dispatch
+        id: get-deployment-after-dispatch
+        uses: ./.github/workflows/e2e/get_deployment_info
+        with:
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      - name: Validate A Workflow Dispatch deployed only DAGs
+        uses: ./.github/workflows/e2e/validate_deployment
+        with:
+          is_wake_on_deploy: ${{ matrix.deployment == 'hibernate' }}
+          is_dag_only_deploy: true
+          dag_tarball_version_before: ${{ steps.get-deployment-before-dispatch.outputs.desired_dag_tarball_version }}
+          image_version_before: ${{ steps.get-deployment-before-dispatch.outputs.desired_image_version }}
+          hibernation_spec_before: ${{ steps.get-deployment-before-dispatch.outputs.hibernation_spec }}
+          dag_tarball_version_after: ${{ steps.get-deployment-after-dispatch.outputs.desired_dag_tarball_version }}
+          image_version_after: ${{ steps.get-deployment-after-dispatch.outputs.desired_image_version }}
+          hibernation_spec_after: ${{ steps.get-deployment-after-dispatch.outputs.hibernation_spec }}
+
   pytests-test:
     name: Pytest Test
     runs-on: ubuntu-latest
@@ -972,6 +1019,32 @@ jobs:
             root_folder: e2e-setup/astro-project
             cli_version: 1.45.0
             accepted: true
+          - case: "image-name with dags-only"
+            deploy_type: dags-only
+            image_name: custom-image:latest
+          - case: "image-name with parse"
+            deploy_type: image-and-dags
+            image_name: custom-image:latest
+            parse: true
+          - case: "image-name with pytest"
+            deploy_type: infer
+            image_name: custom-image:latest
+            pytest: true
+          - case: "image-name with build-secrets"
+            deploy_type: image-only
+            image_name: custom-image:latest
+            build_secrets: "id=e2e,src=e2e-setup/astro-project/Dockerfile"
+          - case: "control: image-only with image-name and parse"
+            deploy_type: image-only
+            image_name: custom-image:latest
+            parse: true
+            root_folder: e2e-setup/astro-project
+            accepted: true
+          - case: "control: delete-deployment-preview ignores deploy inputs"
+            action: delete-deployment-preview
+            deploy_type: dags-only
+            image_name: custom-image:latest
+            accepted: true
     env:
       E2E_STUB_CLI_VERSION: ${{ matrix.cli_version || '1.45.0' }}
     steps:
@@ -1006,6 +1079,10 @@ jobs:
           deploy-type: ${{ matrix.deploy_type || 'infer' }}
           root-folder: ${{ matrix.root_folder }}
           image-trigger-paths: ${{ matrix.image_trigger_paths }}
+          image-name: ${{ matrix.image_name || 'no-custom-image' }}
+          parse: ${{ matrix.parse || 'false' }}
+          pytest: ${{ matrix.pytest || 'false' }}
+          build-secrets: ${{ matrix.build_secrets }}
 
       - name: Validate the action's verdict on the configuration
         shell: bash

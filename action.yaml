@@ -28,7 +28,7 @@ inputs:
   image-name:
     required: false
     default: no-custom-image
-    description: "Specify a custom built image to deploy to an Asto Deployment.  To be used with 'deploy-type' set to 'image-and-dags' or 'infer'"
+    description: "Specify a custom built image to deploy to an Astro Deployment. To be used with 'deploy-type' set to 'image-and-dags', 'infer', or 'image-only', and not with 'parse', 'pytest', or 'build-secrets', since the image is deployed as it was built."
   action:
     required: false
     default: deploy
@@ -235,16 +235,37 @@ runs:
           exit 1 # terminate and indicate error
         fi
 
-        # validate deploy-type-specific inputs
-        # image-trigger-paths only affects image deploys, so it's a no-op for dags-only and dbt
-        if [[ -n "${{ inputs.image-trigger-paths }}" && ( "${{ inputs.deploy-type }}" == "dags-only" || "${{ inputs.deploy-type }}" == "dbt" ) ]]; then
-          echo "ERROR: image-trigger-paths is only supported with deploy-type infer, image-and-dags, or image-only"
-          exit 1 # terminate and indicate error
-        fi
-        # skip-unchanged gates the image/dags diff skip, which the dbt deploy path doesn't use
-        if [[ "${{ inputs.skip-unchanged }}" == "false" && "${{ inputs.deploy-type }}" == "dbt" ]]; then
-          echo "ERROR: skip-unchanged is only supported with deploy-type infer, dags-only, image-and-dags, or image-only"
-          exit 1 # terminate and indicate error
+        # inputs that only shape a deploy aren't validated for a delete, which deploys nothing, so a delete
+        # step that shares a deploy step's inputs still removes the preview
+        if [[ ${{ inputs.action }} != delete-deployment-preview ]]; then
+          # validate deploy-type-specific inputs
+          # a custom image is deployed as it was built, so there is nothing to test or build, and dags-only never
+          # deploys an image; the CLI rejects the equivalent flags alongside --image-name
+          if [[ "${{ inputs.image-name }}" != "no-custom-image" ]]; then
+            if [[ "${{ inputs.deploy-type }}" == "dags-only" ]]; then
+              echo "ERROR: image-name is only supported with deploy-type infer, image-and-dags, or image-only"
+              exit 1 # terminate and indicate error
+            fi
+            # image-only deploys don't pass parse or pytest on
+            if [[ ( "${{ inputs.deploy-type }}" == "infer" || "${{ inputs.deploy-type }}" == "image-and-dags" ) && ( "${{ inputs.parse }}" == "true" || "${{ inputs.pytest }}" == "true" ) ]]; then
+              echo "ERROR: parse and pytest cannot be used with image-name"
+              exit 1 # terminate and indicate error
+            fi
+            if [[ -n "$BUILD_SECRETS" && "${{ inputs.deploy-type }}" != "dbt" ]]; then
+              echo "ERROR: build-secrets cannot be used with image-name"
+              exit 1 # terminate and indicate error
+            fi
+          fi
+          # image-trigger-paths only affects image deploys, so it's a no-op for dags-only and dbt
+          if [[ -n "${{ inputs.image-trigger-paths }}" && ( "${{ inputs.deploy-type }}" == "dags-only" || "${{ inputs.deploy-type }}" == "dbt" ) ]]; then
+            echo "ERROR: image-trigger-paths is only supported with deploy-type infer, image-and-dags, or image-only"
+            exit 1 # terminate and indicate error
+          fi
+          # skip-unchanged gates the image/dags diff skip, which the dbt deploy path doesn't use
+          if [[ "${{ inputs.skip-unchanged }}" == "false" && "${{ inputs.deploy-type }}" == "dbt" ]]; then
+            echo "ERROR: skip-unchanged is only supported with deploy-type infer, dags-only, image-and-dags, or image-only"
+            exit 1 # terminate and indicate error
+          fi
         fi
 
         # Select workspace if specified
@@ -381,6 +402,8 @@ runs:
         echo ::endgroup::
       shell: bash
       id: deployment-preview
+      env:
+        BUILD_SECRETS: ${{ inputs.build-secrets }}
     - name: Determine if DAG Deploy is enabled
       run: |
 
@@ -458,6 +481,7 @@ runs:
         DAGS_ONLY_DEPLOY=false
         SKIP_IMAGE_OR_DAGS_DEPLOY=false
         IMAGE_TRIGGER_MATCHED=false
+        DIFF_UNAVAILABLE=false
         files=()
 
         # collect image-trigger-paths (comma- or newline-separated), trimmed and non-empty
@@ -471,15 +495,17 @@ runs:
 
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
-        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
+        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we cannot tell what changed, so we deploy everything deploy-type covers
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" ||  -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
           echo "Manual workflow dispatch or a new branch or tag creation, hence missing github event before and/or after commit hash"
+          DIFF_UNAVAILABLE=true
         else
           echo "event that triggered the workflow: $GITHUB_REF"
           # history is already present from the fetch-depth: 0 checkout, so no fetch is needed;
           # a `git fetch` here would also fail on private repos due to persist-credentials: false
           if ! git cat-file -e "$GITHUB_EVENT_BEFORE" 2>/dev/null; then
-            echo "Commit $GITHUB_EVENT_BEFORE does not exist, falling back to image deploy."
+            echo "Commit $GITHUB_EVENT_BEFORE does not exist, so the changed files can't be determined; deploying everything deploy-type covers."
+            DIFF_UNAVAILABLE=true
           else
             SKIP_IMAGE_OR_DAGS_DEPLOY=true
             files=$(git diff --name-only $GITHUB_EVENT_BEFORE $GITHUB_EVENT_AFTER)
@@ -536,6 +562,11 @@ runs:
         if [[ ${{ inputs.image-name }} != "no-custom-image" || "${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }}" == "false" || ${{ inputs.action }} == create-deployment-preview ]]; then
           SKIP_IMAGE_OR_DAGS_DEPLOY=false
           DAGS_ONLY_DEPLOY=false
+        fi
+
+        # with no diff to go on, a dags-only step deploys its DAGs, as the other deploy types deploy everything
+        if [[ $DIFF_UNAVAILABLE == true && ${{ inputs.deploy-type }} == 'dags-only' && "${{ steps.dag-deploy-enabled.outputs.DAG_DEPLOY_ENABLED }}" == "true" ]]; then
+          DAGS_ONLY_DEPLOY=true
         fi
 
         # a change under image-trigger-paths forces a full image deploy, even if nothing under root-folder changed
