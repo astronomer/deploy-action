@@ -145,7 +145,8 @@ inputs:
     default: false
     description: >
       If true, exclude the DAGs directory prefix from the uploaded bundle. Use for Airflow 3 Deployments, where the
-      bundle root is already on sys.path. Cannot be combined with `image-name`.
+      bundle root is already on sys.path. Use with `deploy-type: infer`, `dags-only`, or `image-and-dags`, and not with
+      `image-name`.
   checkout-submodules:
     required: false
     default: false
@@ -365,8 +366,8 @@ runs:
             if [[ -z "$option_value" || "$option_value" == "false" ]]; then
               continue
             fi
-            if [[ "${{ inputs.deploy-type }}" == "dbt" || "${{ inputs.deploy-type }}" == "non-dags" ]]; then
-              echo "ERROR: $option_name is only supported with deploy-type infer, dags-only, image-and-dags, or image-only"
+            if [[ "${{ inputs.deploy-type }}" == "image-only" || "${{ inputs.deploy-type }}" == "dbt" || "${{ inputs.deploy-type }}" == "non-dags" ]]; then
+              echo "ERROR: $option_name is only supported with deploy-type infer, dags-only, or image-and-dags"
               exit 1 # terminate and indicate error
             fi
             # the CLI rejects these options alongside a pre-built image, which carries its own DAGs
@@ -375,11 +376,6 @@ runs:
               exit 1 # terminate and indicate error
             fi
           done
-          # a named DAG bundle is only meaningful when the deploy includes DAGs
-          if [[ -n "$DAG_BUNDLE_NAME" && "${{ inputs.deploy-type }}" == "image-only" ]]; then
-            echo "ERROR: dag-bundle-name cannot be used with deploy-type image-only"
-            exit 1 # terminate and indicate error
-          fi
           # a step deploying one bundle must never fall back to building the project's image, which infer
           # does for any change it doesn't classify as a DAG
           if [[ ( -n "$DAG_BUNDLE_NAME" || -n "$DAGS_PATH" ) && "${{ inputs.deploy-type }}" == "infer" ]]; then

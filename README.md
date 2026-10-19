@@ -72,7 +72,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `non-dags-bundle-type` | `` | Free-form label identifying the kind of non-DAG bundle being deployed (e.g. `dbt`), shown in the Deploy History tab. Only applies to the `non-dags` deploy type. Requires Astro CLI 1.44.0 or higher. |
 | `dag-bundle-name` | `` | Deploy DAGs to a named DAG bundle on the Deployment instead of the default bundle. Requires Airflow 3, and the bundle must already exist on the Deployment. Use with `deploy-type: dags-only` or `image-and-dags`. Requires Astro CLI 1.44.0 or higher. |
 | `dags-path` | `` | Deploy DAGs from this path, relative to `root-folder`, instead of the project's `dags` directory. Useful for serving several DAG bundles out of one repository, one action invocation per bundle. A `dags-only` deploy classifies changes against this path instead of `dags/`, and with Astro CLI 1.45.0 or higher (and `parse` and `pytest` off) it needs no Astro project, so `root-folder` can be left empty. Use with `deploy-type: dags-only` or `image-and-dags`. |
-| `no-dags-base-dir` | `false` | If true, exclude the DAGs directory prefix from the uploaded bundle. Use for Airflow 3 Deployments, where the bundle root is already on `sys.path`. Cannot be combined with `image-name`. |
+| `no-dags-base-dir` | `false` | If true, exclude the DAGs directory prefix from the uploaded bundle. Use for Airflow 3 Deployments, where the bundle root is already on `sys.path`. Use with `deploy-type` `infer`, `dags-only`, or `image-and-dags`, and not with `image-name`. |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `sparse-checkout` | `` | Comma- or newline-separated list of cone-mode sparse-checkout patterns passed to `actions/checkout`. When set, only the listed paths (plus repo-root files) are checked out, which can dramatically reduce checkout size for large monorepos. Typically set to the same value as `root-folder`. Works only when `checkout` is set to `true`. Leave empty for a full checkout (default). |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
@@ -212,8 +212,8 @@ each bundle only deploys when its own DAGs change. `dag-bundle-name` and `dags-p
 bundle root is already on `sys.path`.
 
 `dag-bundle-name`, `dags-path`, and `no-dags-base-dir` cannot be combined with `image-name` on deploys that use it, because
-a pre-built image carries its own DAGs. `dag-bundle-name` also cannot be combined with `deploy-type: image-only`, which
-leaves DAGs untouched.
+a pre-built image carries its own DAGs. None of them can be used with `deploy-type` `image-only`, `dbt`, or `non-dags`,
+which deploy no DAGs.
 
 
 ## Installing the Astro CLI

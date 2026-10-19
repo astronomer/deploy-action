@@ -1651,6 +1651,10 @@ jobs:
             deploy_type: image-only
             dag_bundle_name: e2e-team-a
             root_folder: e2e-setup/astro-project
+          - case: "dags-path with image-only"
+            deploy_type: image-only
+            dags_path: e2e-setup/bundles/team_a
+            root_folder: e2e-setup/astro-project
           - case: "dag-bundle-name with image-name"
             deploy_type: image-and-dags
             dag_bundle_name: e2e-team-a
