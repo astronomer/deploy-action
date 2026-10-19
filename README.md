@@ -50,13 +50,14 @@ The following table lists the configuration options for the Deploy to Astro acti
 | Name | Default | Description |
 | ---|---|--- |
 | `action` | `deploy` | Specify what action you would like to take. Use this option to create or delete deployment previews. Specify either `deploy`, `create-deployment-preview`, `delete-deployment-preview` or `deploy-deployment-preview`. If using `deploy` or `deploy-deployment-preview` one should also specify `deploy-type`. |
-| `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs or DBT project. Possible options are `infer`, `dags-only`, `image-and-dags`, `image-only` or `dbt`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. For description on each deploy type checkout [deploy type details](https://github.com/astronomer/deploy-action#deploy-type-details) |
-| `image-trigger-paths` | `` | Comma- or newline-separated list of paths outside `root-folder` that should also trigger a deploy when changed. Useful in monorepos where files built or copied into the image at deploy time (e.g. generated protos) live outside the Astro project. A change under any of these paths forces an image deploy instead of being skipped. Paths are matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory (e.g. `proto/`). Only applies to the `infer`, `image-and-dags`, and `image-only` deploy types. |
-| `skip-unchanged` | `true` | When `true` (default), the action skips the deploy if no changed files fall under `root-folder` (or `image-trigger-paths`). Set to `false` to disable this diff-based skip and always run the deploy dictated by `deploy-type`. This is the closest replacement for the deprecated `deploy-image: true` behavior. Only applies to the `infer`, `dags-only`, `image-and-dags`, and `image-only` deploy types. |
+| `deploy-type` | `infer` | Specify the type of deploy you would like to do. Use this option to deploy images and/or DAGs, a DBT project, or a non-DAG bundle. Possible options are `infer`, `dags-only`, `image-and-dags`, `image-only`, `dbt` or `non-dags`. `infer` option would infer between DAG only deploy and image and DAG deploy based on updated files. For description on each deploy type checkout [deploy type details](https://github.com/astronomer/deploy-action#deploy-type-details) |
+| `image-trigger-paths` | `` | Comma- or newline-separated list of paths outside `root-folder` that should also trigger a deploy when changed. Useful in monorepos where files built or copied into the image at deploy time (e.g. generated protos) live outside the Astro project. A change under any of these paths forces an image deploy instead of being skipped. Paths are matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory (e.g. `proto/`). Only applies to the `infer`, `image-and-dags`, and `image-only` deploy types. For `dbt` and `non-dags` deploys, use `bundle-trigger-paths`. |
+| `bundle-trigger-paths` | `` | Comma- or newline-separated list of paths outside `root-folder` that should also trigger a bundle deploy when changed. Useful in monorepos where a bundle depends on shared files that live outside its own directory. Paths are matched as prefixes against repo-root-relative file paths, so include a trailing slash to scope to a directory (e.g. `shared/macros/`). Only applies to the `dbt` and `non-dags` deploy types. |
+| `skip-unchanged` | `true` | When `true` (default), the action skips the deploy if no changed files fall under `root-folder` (or `image-trigger-paths` / `bundle-trigger-paths`). Set to `false` to disable this diff-based skip and always run the deploy dictated by `deploy-type`. This is the closest replacement for the deprecated `deploy-image: true` behavior. |
 | `deployment-id` | `false` | Specifies the id of the deployment you to make a preview from or are deploying too. |
 | `deployment-name` | `false` | Specifies The name of the deployment you want to make preview from or are deploying too. Cannot be used with `deployment-id` |
 | `description` |  | Configure a description for a deploy to Astro. Description will be visible in the Deploy History tab. |
-| `root-folder` | `.` | Path to the Astro project, or dbt project for dbt deploys. |
+| `root-folder` | `.` | Path to the Astro project, or to the bundle directory for `dbt` and `non-dags` deploys. Required with `deploy-type: non-dags`. |
 | `parse` | `false` | When set to `true`, DAGs are parsed for errors before deploying to Astro. Note that when an image deploy is performed (i.e. `astro deploy`), parsing is also executed by default. Parsing is _not_ performed automatically for DAG-only deploys (i.e. `astro deploy --dags`). |
 | `pytest` | `false` | When set to `true`, all pytests in the `tests` directory of your Astro project are run before deploying to Astro. See [Run tests with pytest](https://docs.astronomer.io/astro/cli/test-your-astro-project-locally#run-tests-with-pytest) |
 | `pytest-file` | (all tests run) | Specifies a custom pytest file to run with the pytest command. For example, you could specify `/tests/test-tags.py`.|
@@ -67,7 +68,8 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `checkout` | `true` | Whether to checkout the repo as the first step. Set this to false if you want to modify repo contents before invoking the action. Your custom checkout step needs to have `fetch-depth` of `0` and `ref` equal to `${{ github.event.after }}` so all the commits in the PR are checked out. Look at the checkout step that runs within this action for reference. |
 | `deploy-image` | `false` | If true image and DAGs will deploy for any action that deploys code. NOTE: This option is deprecated and will be removed in a future release. Use `deploy-type: image-and-dags` instead. |
 | `build-secrets` | `` | Newline-delimited list of Docker build secrets, one `docker build --secret` specification per line (e.g. `id=mysecret,src=secrets.txt`). Each line is passed to `astro deploy` as its own `--build-secret` flag. See https://docs.docker.com/build/building/secrets/ for more information. |
-| `mount-path` | `` | Path to mount dbt project in Airflow, for reference by DAGs. Default /usr/local/airflow/dbt/{dbt project name} |
+| `mount-path` | `` | Path to mount the bundle in Airflow, for reference by DAGs. Required with `deploy-type: non-dags`. With `deploy-type: dbt` it is optional and defaults to /usr/local/airflow/dbt/{dbt project name} |
+| `non-dags-bundle-type` | `` | Free-form label identifying the kind of non-DAG bundle being deployed (e.g. `dbt`), shown in the Deploy History tab. Only applies to the `non-dags` deploy type. Requires Astro CLI 1.44.0 or higher. |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `sparse-checkout` | `` | Comma- or newline-separated list of cone-mode sparse-checkout patterns passed to `actions/checkout`. When set, only the listed paths (plus repo-root files) are checked out, which can dramatically reduce checkout size for large monorepos. Typically set to the same value as `root-folder`. Works only when `checkout` is set to `true`. Leave empty for a full checkout (default). |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
@@ -109,11 +111,15 @@ The following section describe each of the deploy type input value in detail to 
   - if there are no file changes in the configured root-folder then it skips deploy
   - otherwise it would do a dbt deploy
 
+6. `non-dags`: In this mode, deploy-action would run through all the file changes:
+  - if there are no file changes in the configured root-folder then it skips deploy
+  - otherwise it would deploy the root-folder directory as a non-DAG bundle, mounted at `mount-path`
+
 ### Deploying on changes outside `root-folder`
 
 By default the deploy is skipped when no changed files fall under `root-folder`. In monorepos, some files that end up in the
 image are built or copied in at deploy time and live outside the Astro project (e.g. generated protos), so a change to them
-would otherwise be skipped. Two inputs cover this:
+would otherwise be skipped. Three inputs cover this:
 
 - `image-trigger-paths`: list the extra paths that feed the image. A change under any of them forces an image deploy while
   still skipping genuinely unrelated pushes. Applies to `infer`, `image-and-dags`, and `image-only`.
@@ -127,6 +133,17 @@ would otherwise be skipped. Two inputs cover this:
       shared/schemas/
   ```
 
+- `bundle-trigger-paths`: the same idea for bundle deploys. A change under any of them triggers a bundle deploy even when
+  nothing under `root-folder` changed. Applies to `dbt` and `non-dags`.
+
+  ```yaml
+  with:
+    root-folder: dbt
+    deploy-type: dbt
+    bundle-trigger-paths: |
+      shared/macros/
+  ```
+
 - `skip-unchanged: false`: disables the diff-based skip entirely, so the deploy dictated by `deploy-type` runs on every
   invocation. This is the closest replacement for the deprecated `deploy-image: true`.
 
@@ -137,6 +154,30 @@ would otherwise be skipped. Two inputs cover this:
     skip-unchanged: false
   ```
 
+## Non-DAG bundle deploys
+
+A non-DAG bundle is any directory deployed to a Deployment and mounted at a path, for DAGs to reference at runtime — a dbt
+project, a set of SQL files, a config tree. `deploy-type: dbt` is the older, dbt-specific form of this; `deploy-type: non-dags`
+deploys any directory and requires Astro CLI 1.44.0 or higher.
+
+```yaml
+- name: Deploy SQL assets to Astro
+  uses: astronomer/deploy-action@v0.16.0
+  with:
+    deployment-id: <deployment-id>
+    deploy-type: non-dags
+    root-folder: sql
+    mount-path: /usr/local/airflow/sql
+    non-dags-bundle-type: sql
+```
+
+`root-folder` is the directory to deploy, and is required. `mount-path` is also required, and is the path DAGs use to reach
+the bundle's contents inside Airflow. `non-dags-bundle-type` is a free-form label shown in the Deploy History tab; it does
+not change how the bundle is handled.
+
+> [!IMPORTANT]
+> The bundle directory must not sit inside an Astro project. `astro-project/` and `sql/` as siblings works; `astro-project/sql/`
+> is rejected by the Astro CLI. Keep the bundle a sibling of the Astro project in the repository.
 
 ## Installing the Astro CLI
 

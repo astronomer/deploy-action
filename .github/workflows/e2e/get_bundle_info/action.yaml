@@ -16,6 +16,9 @@ inputs:
   expected_status_code:
     description: The expected status code
     default: 200
+  bundle_type:
+    description: The bundle type to look for among the deployment's bundle deploys
+    default: dbt
 
 outputs:
   desired_bundle_version:
@@ -45,12 +48,22 @@ runs:
           exit 1
         fi
 
-        # sort by updatedAt to fetch the latest deploy object
-        cat response.json | jq '.deploys | sort_by(.updatedAt)' > response_sorted.json
+        # the latest bundle deploy carrying a bundle of this type; a deploy can list several bundles,
+        # so match any of them rather than assuming it comes first
+        latest=$(jq -c --arg bundle_type "${{ inputs.bundle_type }}" '
+          [.deploys[] | select(.type == "BUNDLE")
+            | {updatedAt, bundle: ([.bundles[]? | select(.bundleType == $bundle_type)] | first)}
+            | select(.bundle != null)]
+          | sort_by(.updatedAt) | last // empty' response.json)
+        echo "Latest ${{ inputs.bundle_type }} bundle deploy: ${latest:-none}"
+        if [[ -z "$latest" ]]; then
+          echo "Bundle deploys on the deployment:"
+          jq -c '[.deploys[] | select(.type == "BUNDLE") | {updatedAt, bundles: [.bundles[]? | {bundleType, desiredVersion}]}]' response.json
+        fi
 
-        desired_bundle_version=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .bundles[0].desiredVersion' | head -n 1)
-        bundle_type=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .bundles[0].bundleType' | head -n 1)
-        updated_at=$(cat response_sorted.json | jq -r '.[] | select(.type == "BUNDLE" and .bundles[0].bundleType == "dbt") | .updatedAt' | head -n 1)
+        desired_bundle_version=$(jq -r '.bundle.desiredVersion // ""' <<< "${latest:-null}")
+        bundle_type=$(jq -r '.bundle.bundleType // ""' <<< "${latest:-null}")
+        updated_at=$(jq -r '.updatedAt // ""' <<< "${latest:-null}")
 
         echo "desired_bundle_version=$desired_bundle_version" >> $GITHUB_OUTPUT
         echo "bundle_type=$bundle_type" >> $GITHUB_OUTPUT
