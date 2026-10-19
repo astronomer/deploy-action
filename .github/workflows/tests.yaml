@@ -1105,13 +1105,210 @@ jobs:
           echo "Non-DAG Bundle Deploy Action validation failed: bundle was not updated"
           exit 1
 
+  # Deploys DAGs served from a non-default path into a named DAG bundle, which the deploy does not
+  # create — so the bundle is registered up front with `astro deployment bundle create`.
+  named-dag-bundle-test:
+    name: Named DAG Bundle Deploy Test
+    runs-on: ubuntu-latest
+    needs: [non-dags-deploy-test, create-test-deployments]
+    if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
+    env:
+      E2E_DEPLOYMENT_ID: ${{ fromJSON(needs.create-test-deployments.outputs.DEPLOYMENTS)['bundle'] }}
+      DAG_BUNDLE_NAME: e2e-team-a
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Patch deploy-action for manual dispatch
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      - name: Get Astro Environment Info
+        id: get-astro-env-info
+        uses: ./.github/workflows/e2e/get_astro_env_info
+        with:
+          input_workspace_id: ${{ github.event.inputs.workspace_id }}
+          input_organization_id: ${{ github.event.inputs.org_id }}
+          input_astronomer_host: ${{ github.event.inputs.astronomer_host }}
+          input_astro_api_token: ${{ github.event.inputs.token }}
+          secret_workspace_id: ${{ secrets.WORKSPACE_ID }}
+          secret_organization_id: ${{ secrets.ORGANIZATION_ID }}
+          secret_astronomer_host: ${{ secrets.ASTRONOMER_HOST }}
+          secret_astro_api_token: ${{ secrets.ASTRO_API_TOKEN }}
+
+      - name: Install Astro CLI
+        uses: astronomer/setup-astro-cli@v0.0.1
+        with:
+          version: ${{ github.event.inputs.cli_version }}
+
+      - name: Install dependencies
+        run: sudo apt-get install jq
+
+      - name: Set CLI context
+        run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+
+      # must happen before the deploy, and before the git mock is installed, since the CLI reads git metadata
+      - name: Create the named DAG bundle
+        run: |
+          astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          astro deployment bundle create --deployment-id ${{ env.E2E_DEPLOYMENT_ID }} --name "$DAG_BUNDLE_NAME"
+
+      - name: Get named DAG bundle before test
+        id: get-bundle-before
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-team-a
+
+      - name: Mock git commands
+        run: |
+          mv e2e-setup/mocks/configurable-git.sh /usr/local/bin/git
+          chmod +x /usr/local/bin/git
+
+      # a DAG change elsewhere (here the project's dags/ folder, which the default matcher would treat
+      # as a DAG change) is not this bundle's change, so this must not deploy
+      - name: Deploy with only an unrelated DAG changed
+        uses: ./
+        env:
+          E2E_CHANGED_FILES: e2e-setup/astro-project/dags/exampledag.py
+        with:
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          deploy-type: dags-only
+          dags-path: e2e-setup/bundles/team_a
+          dag-bundle-name: e2e-team-a
+          no-dags-base-dir: true
+          wait-time: 15m
+
+      - name: Get named DAG bundle after unrelated change
+        id: get-bundle-unrelated
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-team-a
+
+      - name: Validate the unrelated change did not deploy
+        shell: bash
+        run: |
+          before="${{ steps.get-bundle-before.outputs.desired_version }}"
+          after="${{ steps.get-bundle-unrelated.outputs.desired_version }}"
+          echo "desired version before: '$before', after: '$after'"
+          if [[ "$after" != "$before" ]]; then
+            echo "Named DAG Bundle validation failed: a change outside dags-path deployed the bundle"
+            exit 1
+          fi
+          echo "Named DAG Bundle validation succeeded: change outside dags-path skipped"
+
+      - name: Re-patch deploy-action before the next invocation
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      # The DAGs live outside the Astro project and root-folder is left empty, so the CLI runs from the
+      # repo root, which has no project: the deploy only succeeds if --dags-path reaches the CLI. The
+      # changed file's path has no dags/ in it, so it only counts as a DAG change if dags-path is honored.
+      - name: Deploy DAGs to the named bundle
+        uses: ./
+        env:
+          E2E_CHANGED_FILES: e2e-setup/bundles/team_a/team_a_dag.py
+        with:
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          deploy-type: dags-only
+          dags-path: e2e-setup/bundles/team_a
+          dag-bundle-name: e2e-team-a
+          no-dags-base-dir: true
+          description: "test-named-dag-bundle-deploy-action"
+          wait-time: 15m
+
+      - name: Get named DAG bundle after test
+        id: get-bundle-after
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-team-a
+
+      - name: Validate Named DAG Bundle Deploy Action
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-bundle-after.outputs.found }}" != "true" ]]; then
+            echo "Named DAG Bundle validation failed: bundle $DAG_BUNDLE_NAME not found on the deployment"
+            exit 1
+          fi
+
+          before="${{ steps.get-bundle-before.outputs.desired_version }}"
+          after="${{ steps.get-bundle-after.outputs.desired_version }}"
+          echo "desired version before: '$before', after: '$after'"
+
+          if [[ "$after" == "" ]]; then
+            echo "Named DAG Bundle validation failed: DAGs were not deployed to the named bundle"
+            exit 1
+          fi
+
+          if [[ "$after" == "$before" ]]; then
+            echo "Named DAG Bundle validation failed: bundle version did not change"
+            exit 1
+          fi
+
+          echo "Named DAG Bundle validation succeeded: DAGs landed in $DAG_BUNDLE_NAME"
+
+      - name: Re-patch deploy-action before the dispatch invocation
+        uses: ./.github/workflows/e2e/patch_action_for_dispatch
+
+      # a workflow_dispatch (or the create event that sets up a deployment preview) has no diff, so a
+      # dags-only step must deploy its DAGs even though nothing in its path is reported as changed
+      - name: Deploy DAGs on a workflow dispatch
+        uses: ./
+        env:
+          DEPLOY_ACTION_DIFF_BEFORE: ""
+          DEPLOY_ACTION_DIFF_AFTER: ""
+          E2E_CHANGED_FILES: README.md
+        with:
+          deployment-id: ${{ env.E2E_DEPLOYMENT_ID }}
+          workspace: ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          deploy-type: dags-only
+          dags-path: e2e-setup/bundles/team_a
+          dag-bundle-name: e2e-team-a
+          no-dags-base-dir: true
+          wait-time: 15m
+
+      - name: Get named DAG bundle after dispatch
+        id: get-bundle-dispatch
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-team-a
+
+      - name: Validate the dispatch deployed the DAGs
+        shell: bash
+        run: |
+          before="${{ steps.get-bundle-after.outputs.desired_version }}"
+          after="${{ steps.get-bundle-dispatch.outputs.desired_version }}"
+          echo "desired version before: '$before', after: '$after'"
+          if [[ -z "$after" || "$after" == "$before" ]]; then
+            echo "Named DAG Bundle validation failed: a dispatch with no diff did not deploy the DAGs"
+            exit 1
+          fi
+          echo "Named DAG Bundle validation succeeded: dispatch deployed the DAGs"
+
   # Asserts the skip side of the bundle deploy decision: no change under root-folder means no deploy,
   # unless skip-unchanged is off, a bundle-trigger-path matched, or the diff cannot be computed.
   # The git mock reports README.md.
   bundle-skip-test:
     name: Bundle Deploy Skip Test
     runs-on: ubuntu-latest
-    needs: [non-dags-deploy-test, create-test-deployments]
+    needs: [named-dag-bundle-test, create-test-deployments]
     if: ${{ !cancelled() && needs.create-test-deployments.result == 'success' }}
     env:
       E2E_CHANGED_FILES: README.md
@@ -1445,6 +1642,43 @@ jobs:
             mount_path: /usr/local/airflow/e2e-valid
             root_folder: e2e-setup/non-dags
             accepted: true
+          - case: "dags-path with non-dags"
+            deploy_type: non-dags
+            mount_path: /usr/local/airflow/e2e-invalid
+            root_folder: e2e-setup/non-dags
+            dags_path: e2e-setup/bundles/team_a
+          - case: "dag-bundle-name with image-only"
+            deploy_type: image-only
+            dag_bundle_name: e2e-team-a
+            root_folder: e2e-setup/astro-project
+          - case: "dag-bundle-name with image-name"
+            deploy_type: image-and-dags
+            dag_bundle_name: e2e-team-a
+            root_folder: e2e-setup/astro-project
+            image_name: custom-image:latest
+          - case: "dags-path with infer"
+            deploy_type: infer
+            dags_path: e2e-setup/bundles/team_a
+          - case: "dag-bundle-name with infer"
+            deploy_type: infer
+            dag_bundle_name: e2e-team-a
+            root_folder: e2e-setup/astro-project
+          - case: "dags-path that does not exist"
+            deploy_type: dags-only
+            dags_path: e2e-setup/bundles/missing
+          - case: "dags-path outside the repository"
+            deploy_type: dags-only
+            dags_path: ..
+          - case: "dag-bundle-name below the minimum CLI version"
+            deploy_type: dags-only
+            dag_bundle_name: e2e-team-a
+            dags_path: e2e-setup/bundles/team_a
+            cli_version: 1.43.1
+          - case: "control: dags-only with a named bundle"
+            deploy_type: dags-only
+            dag_bundle_name: e2e-team-a
+            dags_path: e2e-setup/bundles/team_a
+            accepted: true
     env:
       E2E_STUB_CLI_VERSION: ${{ matrix.cli_version || '1.45.0' }}
     steps:
@@ -1485,6 +1719,8 @@ jobs:
           build-secrets: ${{ matrix.build_secrets }}
           mount-path: ${{ matrix.mount_path }}
           non-dags-bundle-type: ${{ matrix.non_dags_bundle_type }}
+          dag-bundle-name: ${{ matrix.dag_bundle_name }}
+          dags-path: ${{ matrix.dags_path }}
 
       - name: Validate the action's verdict on the configuration
         shell: bash
@@ -2015,6 +2251,7 @@ jobs:
         custom-docker-image-test,
         dbt-deploy-test,
         non-dags-deploy-test,
+        named-dag-bundle-test,
         bundle-skip-test,
         deployment-preview-test,
         remote-deploy-test,
