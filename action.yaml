@@ -495,7 +495,7 @@ runs:
 
         GITHUB_EVENT_BEFORE=${{ github.event.before }}
         GITHUB_EVENT_AFTER=${{ github.event.after }}
-        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we would need to deploy the image because we cannot determine that it does not need to be deployed
+        # case when the triggered event is a manual workflow dispatch or a new branch or tag creation, we cannot tell what changed, so we deploy everything deploy-type covers
         if [[ "$GITHUB_EVENT_BEFORE" == "0000000000000000000000000000000000000000" ||  -z $GITHUB_EVENT_BEFORE && -z $GITHUB_EVENT_AFTER ]]; then
           echo "Manual workflow dispatch or a new branch or tag creation, hence missing github event before and/or after commit hash"
           DIFF_UNAVAILABLE=true
@@ -504,7 +504,7 @@ runs:
           # history is already present from the fetch-depth: 0 checkout, so no fetch is needed;
           # a `git fetch` here would also fail on private repos due to persist-credentials: false
           if ! git cat-file -e "$GITHUB_EVENT_BEFORE" 2>/dev/null; then
-            echo "Commit $GITHUB_EVENT_BEFORE does not exist, falling back to image deploy."
+            echo "Commit $GITHUB_EVENT_BEFORE does not exist, so the changed files can't be determined; deploying everything deploy-type covers."
             DIFF_UNAVAILABLE=true
           else
             SKIP_IMAGE_OR_DAGS_DEPLOY=true
