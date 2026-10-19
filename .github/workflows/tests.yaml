@@ -1040,6 +1040,11 @@ jobs:
             parse: true
             root_folder: e2e-setup/astro-project
             accepted: true
+          - case: "control: delete-deployment-preview ignores deploy inputs"
+            action: delete-deployment-preview
+            deploy_type: dags-only
+            image_name: custom-image:latest
+            accepted: true
     env:
       E2E_STUB_CLI_VERSION: ${{ matrix.cli_version || '1.45.0' }}
     steps:

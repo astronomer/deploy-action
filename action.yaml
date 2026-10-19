@@ -235,33 +235,37 @@ runs:
           exit 1 # terminate and indicate error
         fi
 
-        # validate deploy-type-specific inputs
-        # a custom image is deployed as it was built, so there is nothing to test or build, and dags-only never
-        # deploys an image; the CLI rejects the equivalent flags alongside --image-name
-        if [[ "${{ inputs.image-name }}" != "no-custom-image" ]]; then
-          if [[ "${{ inputs.deploy-type }}" == "dags-only" ]]; then
-            echo "ERROR: image-name is only supported with deploy-type infer, image-and-dags, or image-only"
+        # inputs that only shape a deploy aren't validated for a delete, which deploys nothing, so a delete
+        # step that shares a deploy step's inputs still removes the preview
+        if [[ ${{ inputs.action }} != delete-deployment-preview ]]; then
+          # validate deploy-type-specific inputs
+          # a custom image is deployed as it was built, so there is nothing to test or build, and dags-only never
+          # deploys an image; the CLI rejects the equivalent flags alongside --image-name
+          if [[ "${{ inputs.image-name }}" != "no-custom-image" ]]; then
+            if [[ "${{ inputs.deploy-type }}" == "dags-only" ]]; then
+              echo "ERROR: image-name is only supported with deploy-type infer, image-and-dags, or image-only"
+              exit 1 # terminate and indicate error
+            fi
+            # image-only deploys don't pass parse or pytest on
+            if [[ ( "${{ inputs.deploy-type }}" == "infer" || "${{ inputs.deploy-type }}" == "image-and-dags" ) && ( "${{ inputs.parse }}" == "true" || "${{ inputs.pytest }}" == "true" ) ]]; then
+              echo "ERROR: parse and pytest cannot be used with image-name"
+              exit 1 # terminate and indicate error
+            fi
+            if [[ -n "$BUILD_SECRETS" && "${{ inputs.deploy-type }}" != "dbt" ]]; then
+              echo "ERROR: build-secrets cannot be used with image-name"
+              exit 1 # terminate and indicate error
+            fi
+          fi
+          # image-trigger-paths only affects image deploys, so it's a no-op for dags-only and dbt
+          if [[ -n "${{ inputs.image-trigger-paths }}" && ( "${{ inputs.deploy-type }}" == "dags-only" || "${{ inputs.deploy-type }}" == "dbt" ) ]]; then
+            echo "ERROR: image-trigger-paths is only supported with deploy-type infer, image-and-dags, or image-only"
             exit 1 # terminate and indicate error
           fi
-          # image-only deploys don't pass parse or pytest on
-          if [[ ( "${{ inputs.deploy-type }}" == "infer" || "${{ inputs.deploy-type }}" == "image-and-dags" ) && ( "${{ inputs.parse }}" == "true" || "${{ inputs.pytest }}" == "true" ) ]]; then
-            echo "ERROR: parse and pytest cannot be used with image-name"
+          # skip-unchanged gates the image/dags diff skip, which the dbt deploy path doesn't use
+          if [[ "${{ inputs.skip-unchanged }}" == "false" && "${{ inputs.deploy-type }}" == "dbt" ]]; then
+            echo "ERROR: skip-unchanged is only supported with deploy-type infer, dags-only, image-and-dags, or image-only"
             exit 1 # terminate and indicate error
           fi
-          if [[ -n "$BUILD_SECRETS" && "${{ inputs.deploy-type }}" != "dbt" ]]; then
-            echo "ERROR: build-secrets cannot be used with image-name"
-            exit 1 # terminate and indicate error
-          fi
-        fi
-        # image-trigger-paths only affects image deploys, so it's a no-op for dags-only and dbt
-        if [[ -n "${{ inputs.image-trigger-paths }}" && ( "${{ inputs.deploy-type }}" == "dags-only" || "${{ inputs.deploy-type }}" == "dbt" ) ]]; then
-          echo "ERROR: image-trigger-paths is only supported with deploy-type infer, image-and-dags, or image-only"
-          exit 1 # terminate and indicate error
-        fi
-        # skip-unchanged gates the image/dags diff skip, which the dbt deploy path doesn't use
-        if [[ "${{ inputs.skip-unchanged }}" == "false" && "${{ inputs.deploy-type }}" == "dbt" ]]; then
-          echo "ERROR: skip-unchanged is only supported with deploy-type infer, dags-only, image-and-dags, or image-only"
-          exit 1 # terminate and indicate error
         fi
 
         # Select workspace if specified
