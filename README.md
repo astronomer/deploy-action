@@ -70,7 +70,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `build-secrets` | `` | Newline-delimited list of Docker build secrets, one `docker build --secret` specification per line (e.g. `id=mysecret,src=secrets.txt`). Each line is passed to `astro deploy` as its own `--build-secret` flag. See https://docs.docker.com/build/building/secrets/ for more information. |
 | `mount-path` | `` | Path to mount the bundle in Airflow, for reference by DAGs. Required with `deploy-type: non-dags`. With `deploy-type: dbt` it is optional and defaults to /usr/local/airflow/dbt/{dbt project name} |
 | `non-dags-bundle-type` | `` | Free-form label identifying the kind of non-DAG bundle being deployed (e.g. `dbt`), shown in the Deploy History tab. Only applies to the `non-dags` deploy type. Requires Astro CLI 1.44.0 or higher. |
-| `dag-bundle-name` | `` | Deploy DAGs to a named DAG bundle on the Deployment instead of the default bundle. Requires Airflow 3, and the bundle must already exist on the Deployment. Use with `deploy-type: dags-only` or `image-and-dags`. Requires Astro CLI 1.44.0 or higher. |
+| `dag-bundle-name` | `` | Deploy DAGs to a named DAG bundle on the Deployment instead of the default bundle. Requires Airflow 3, and the bundle must already exist on the Deployment; `create-deployment-preview` copies the original Deployment's bundles to the preview. Use with `deploy-type: dags-only` or `image-and-dags`. Requires Astro CLI 1.44.0 or higher. |
 | `dags-path` | `` | Deploy DAGs from this path, relative to `root-folder`, instead of the project's `dags` directory. Useful for serving several DAG bundles out of one repository, one action invocation per bundle. A `dags-only` deploy classifies changes against this path instead of `dags/`, and with Astro CLI 1.45.0 or higher (and `parse` and `pytest` off) it needs no Astro project, so `root-folder` can be left empty. Use with `deploy-type: dags-only` or `image-and-dags`. |
 | `no-dags-base-dir` | `false` | If true, exclude the DAGs directory prefix from the uploaded bundle. Use for Airflow 3 Deployments, where the bundle root is already on `sys.path`. Use with `deploy-type` `infer`, `dags-only`, or `image-and-dags`, and not with `image-name`. |
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
@@ -214,6 +214,11 @@ bundle root is already on `sys.path`.
 `dag-bundle-name`, `dags-path`, and `no-dags-base-dir` cannot be combined with `image-name` on deploys that use it, because
 a pre-built image carries its own DAGs. None of them can be used with `deploy-type` `image-only`, `dbt`, or `non-dags`,
 which deploy no DAGs.
+
+When `create-deployment-preview` creates a preview, it copies the original Deployment's bundles to it: DAG bundles by name,
+and non-DAG bundles with their mount path, type, and the DAG bundles they are served alongside. Only the bundles are copied,
+not their contents, so add each bundle's deploy step (with `action: deploy-deployment-preview`) to the workflow that creates
+the preview, after the create step. See [Deployment Preview Templates](https://github.com/astronomer/deploy-action#deployment-preview-templates).
 
 
 ## Installing the Astro CLI
@@ -537,6 +542,10 @@ This section contains four workflow files that you will need in your repository 
 2. When a PR is created from a branch code changes will be deployed to the Deployment Preview
 3. When a PR is merged into your "main" branch code changes will be deployed to the original Deployment
 4. When a branch is deleted the corresponding Deployment Preview will also be deleted
+
+The Deployment Preview gets copies of the original Deployment's DAG and non-DAG bundles, but not their contents. If you deploy
+bundles (`dbt`, `non-dags`, or `dag-bundle-name`), add each bundle's deploy step, with `action: deploy-deployment-preview`, to
+the workflow that creates the preview, after the create step, so a new preview starts with every bundle deployed.
 
 ## Create Deployment Preview
 

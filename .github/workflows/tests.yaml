@@ -1974,6 +1974,28 @@ jobs:
       - name: Set CLI context
         run: astro context switch ${{ steps.get-astro-env-info.outputs.astronomer_host }}
 
+      # the preview is cloned from a template that carries no bundles, so the action has to copy these
+      - name: Register a DAG bundle on the original deployment
+        run: |
+          astro workspace switch ${{ steps.get-astro-env-info.outputs.workspace_id }}
+          astro deployment bundle create --deployment-id ${{ env.E2E_DEPLOYMENT_ID }} --name e2e-preview-team
+
+      - name: Get the original deployment's DAG bundle
+        id: get-source-team-bundle
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ env.E2E_DEPLOYMENT_ID }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-preview-team
+
+      - name: Register a non-DAG bundle served alongside it
+        run: |
+          astro deployment bundle create --deployment-id ${{ env.E2E_DEPLOYMENT_ID }} \
+            --mount-path /usr/local/airflow/e2e-preview-assets --bundle-type e2e-preview \
+            --dag-bundle-ids ${{ steps.get-source-team-bundle.outputs.bundle_id }}
+
       - name: Create Deployment Preview
         id: create-deployment-preview
         uses: ./
@@ -2010,6 +2032,46 @@ jobs:
           dag_tarball_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_dag_tarball_version }}
           image_version_after: ${{ steps.get-deployment-after-create-preview.outputs.desired_image_version }}
           hibernation_spec_after: ${{ steps.get-deployment-after-create-preview.outputs.hibernation_spec }}
+
+      - name: Get the copied DAG bundle on the preview
+        id: get-preview-team-bundle
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          bundle_name: e2e-preview-team
+
+      - name: Get the copied non-DAG bundle on the preview
+        id: get-preview-assets-bundle
+        uses: ./.github/workflows/e2e/get_deployment_bundle
+        with:
+          deployment_id: ${{ steps.create-deployment-preview.outputs.preview-id }}
+          organization_id: ${{ steps.get-astro-env-info.outputs.organization_id }}
+          astro_api_token: ${{ steps.get-astro-env-info.outputs.astro_api_token }}
+          astronomer_host: ${{ steps.get-astro-env-info.outputs.astronomer_host }}
+          mount_path: /usr/local/airflow/e2e-preview-assets
+
+      - name: Validate the bundles were copied to the preview
+        shell: bash
+        run: |
+          if [[ "${{ steps.get-preview-team-bundle.outputs.found }}" != "true" ]]; then
+            echo "Bundle copy validation failed: DAG bundle e2e-preview-team is missing from the preview"
+            exit 1
+          fi
+          if [[ "${{ steps.get-preview-assets-bundle.outputs.found }}" != "true" ]]; then
+            echo "Bundle copy validation failed: non-DAG bundle at /usr/local/airflow/e2e-preview-assets is missing from the preview"
+            exit 1
+          fi
+          # the link must point at the preview's own copy of the DAG bundle, not the original's
+          team_id="${{ steps.get-preview-team-bundle.outputs.bundle_id }}"
+          linked=",${{ steps.get-preview-assets-bundle.outputs.dag_bundle_ids }},"
+          if [[ "$linked" != *",$team_id,"* ]]; then
+            echo "Bundle copy validation failed: the non-DAG bundle is linked to '$linked', not the preview's e2e-preview-team ($team_id)"
+            exit 1
+          fi
+          echo "Bundle copy validation succeeded"
 
       - name: Mock git commands
         run: |
