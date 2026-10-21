@@ -35,7 +35,7 @@ To use this GitHub action, you need:
 
 To use this action, read [Automate code deploys with CI/CD](https://docs.astronomer.io/astro/ci-cd?tab=multiple%20branch#github-actions-dag-based-deploy). You will:
 
-1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.16.0`.
+1. Create a GitHub Actions workflow in your repository that uses the latest version of this action. For example, `astronomer/deploy-action@v0.17.0`.
 2. Configure the workflow to fit your team's use case. This could include creating a deployment preview or adding tests. See [Configuration options](https://github.com/astronomer/deploy-action#configuration-options).
 3. Make changes to your Astro project files in GitHub and let this GitHub Actions workflow take care of deploying your code to Astro.
 
@@ -76,7 +76,7 @@ The following table lists the configuration options for the Deploy to Astro acti
 | `checkout-submodules` | `false` | Whether to checkout submodules when cloning the repository: `false` to disable (default), `true` to checkout submodules or `recursive` to recursively checkout submodules. Works only when `checkout` is set to `true`. Works only when `checkout` is set to `true`. |
 | `sparse-checkout` | `` | Comma- or newline-separated list of cone-mode sparse-checkout patterns passed to `actions/checkout`. When set, only the listed paths (plus repo-root files) are checked out, which can dramatically reduce checkout size for large monorepos. Typically set to the same value as `root-folder`. Works only when `checkout` is set to `true`. Leave empty for a full checkout (default). |
 | `wake-on-deploy` | `false` | If true, the deployment will be woken up from hibernation before deploying. NOTE: This option overrides the deployment's hibernation override spec. |
-| `cli-version` | `1.45.0` | The desired Astro CLI version to use. The default is pinned, so a given ref of this action always installs the same CLI version. Bump it to move. Ignored when the Astro CLI is already installed. |
+| `cli-version` | `1.46.1` | The desired Astro CLI version to use. The default is pinned, so a given ref of this action always installs the same CLI version. Bump it to move. Ignored when the Astro CLI is already installed. |
 | `wait-time` | `` | The max time to wait for the deployment or deploy operation to finish successfully. If not specified, the default value would be 10 minutes. Expected value format - 300s or 5m |
 
 
@@ -165,7 +165,7 @@ deploys any directory and requires Astro CLI 1.44.0 or higher.
 
 ```yaml
 - name: Deploy SQL assets to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment-id>
     deploy-type: non-dags
@@ -190,7 +190,7 @@ CLI 1.44.0 or higher.
 
 ```yaml
 - name: Deploy team A's DAGs
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment-id>
     deploy-type: dags-only
@@ -236,7 +236,7 @@ steps:
   uses: astronomer/setup-astro-cli@v0.0.1
 
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment-id>
 ```
@@ -251,7 +251,7 @@ steps:
     version: "1.29.0"
 
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment-id>
 ```
@@ -266,7 +266,7 @@ steps:
     download-url: https://mirror.example.com/astro-cli/v1.29.0/astro_linux_amd64.tar.gz
 
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment-id>
 ```
@@ -282,12 +282,12 @@ jobs:
       uses: astronomer/setup-astro-cli@v0.0.1
 
     - name: Deploy to Development
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         deployment-id: <dev-deployment-id>
 
     - name: Deploy to Staging
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         deployment-id: <staging-deployment-id>
 ```
@@ -318,7 +318,7 @@ jobs:
     - name: Install Astro CLI
       uses: astronomer/setup-astro-cli@v0.0.1
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         deployment-id: <deployment id>
         parse: true
@@ -333,7 +333,7 @@ In the following example, the folder `/example-dags/` is specified as the root f
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     root-folder: /example-dags/
@@ -346,7 +346,7 @@ In the following example, the pytest located at `/tests/test-tags.py` runs befor
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     pytest: true
@@ -360,7 +360,7 @@ In the following example, `force` is enabled and both the DAG parse and pytest p
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     force: true
@@ -373,7 +373,7 @@ In the following example, two [Docker build secrets](https://docs.docker.com/bui
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   env:
     PLATFORM_PASSWORD: ${{ secrets.PLATFORM_PASSWORD }}
   with:
@@ -429,7 +429,7 @@ jobs:
         build-args: |
           <your-build-arguments>
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         deployment-id: <deployment id>
         deploy-type: image-and-dags
@@ -444,7 +444,7 @@ In the following example we would be deploying the dbt project located at `dbt` 
 ```yaml
 steps:
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
@@ -462,13 +462,13 @@ steps:
   with:
     version: "1.30.0"  # DBT deploys require CLI >= 1.28.1
 - name: DBT Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     deploy-type: dbt
     root-folder: dbt
 - name: DAGs/Image Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     root-folder: astro-project/
@@ -490,27 +490,27 @@ steps:
   with:
     version: "1.45.0"  # DAG bundles deployed outside an Astro project require CLI >= 1.45.0
 - name: Image Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     deploy-type: image-only
     root-folder: astro-project
 - name: Deploy team A's DAGs
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     deploy-type: dags-only
     dags-path: bundles/team-a
     dag-bundle-name: team-a
 - name: Deploy team B's DAGs
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     deploy-type: dags-only
     dags-path: bundles/team-b
     dag-bundle-name: team-b
 - name: Deploy SQL assets
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     deploy-type: non-dags
@@ -526,7 +526,7 @@ In the following example, the deployment is woken up from hibernation before dep
 ```yaml
 steps:
 - name: Deploy to Astro
-  uses: astronomer/deploy-action@v0.16.0
+  uses: astronomer/deploy-action@v0.17.0
   with:
     deployment-id: <deployment id>
     wake-on-deploy: true
@@ -566,7 +566,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Create Deployment Preview
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         action: create-deployment-preview
         deployment-id: <original deployment id>
@@ -592,7 +592,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         action: deploy-deployment-preview
         deployment-id: <original deployment id>
@@ -617,7 +617,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Deployment Preview
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         action: deploy-deployment-preview
         deploy-type: dbt
@@ -644,7 +644,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Delete Deployment Preview
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         action: delete-deployment-preview
         deployment-id: <original deployment id>
@@ -669,7 +669,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to Astro
-      uses: astronomer/deploy-action@v0.16.0
+      uses: astronomer/deploy-action@v0.17.0
       with:
         deployment-id: <original deployment id>
 ```

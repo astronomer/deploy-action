@@ -59,7 +59,7 @@ inputs:
     description: "Copy pools from the original Deployment to the new deployment preview."
   cli-version:
     required: false
-    default: "1.45.0"
+    default: "1.46.1"
     description: "The desired Astro CLI version to use. Pinned so a given ref of this action always installs the same CLI."
   checkout:
     required: false
